@@ -1,0 +1,30 @@
+[project]
+name = "autobonk"
+version = "0.1.0"
+description = "PokéBonk autopilot"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.50",
+    "pynput>=1.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+autobonk = "autobonk.__main__:main"
+
+[tool.setuptools]
+packages = ["autobonk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[[tool.mypy.overrides]]
+module = "pynput.*"
+ignore_missing_imports = true

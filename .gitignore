@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Chrome profile holds the logged-in session; never commit it.
+profile/
+.claude/settings.local.json
+*.egg-info/
+*.stackdump
