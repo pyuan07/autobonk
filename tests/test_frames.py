@@ -7,8 +7,8 @@ class FakePage:
     def __init__(self, html="<html><body>等级 3!</body></html>"):
         self.html = html
 
-    def screenshot(self):
-        return b"\x89PNG fake"
+    def screenshot(self, type="png", quality=None):
+        return b"\x89PNG fake" if type == "png" else b"JPEG fake"
 
     def content(self):
         return self.html
@@ -42,3 +42,7 @@ def test_frames_saved_at_the_same_instant_get_unique_names(tmp_path):
 
     assert first != second
     assert len(list((tmp_path / "frames").iterdir())) == 6
+
+
+def test_fast_capture_takes_a_jpeg():
+    assert capture_frame(FakePage(), fast=True).screenshot == b"JPEG fake"

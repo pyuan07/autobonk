@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol
 
 
 @dataclass(frozen=True)
@@ -23,14 +23,16 @@ class Page(Protocol):
     @property
     def url(self) -> str: ...
 
-    def screenshot(self) -> bytes: ...
+    def screenshot(self, *, type: Literal["png", "jpeg"] = ..., quality: int | None = ...) -> bytes: ...
 
     def content(self) -> str: ...
 
 
-def capture_frame(page: Page, clock: Callable[[], float] = time.time) -> Frame:
+def capture_frame(page: Page, clock: Callable[[], float] = time.time, *, fast: bool = False) -> Frame:
+    """`fast` takes a JPEG (~50 ms) instead of a PNG (~400 ms+) for live bot steps; saved frames use PNG."""
     timestamp = clock()
-    return Frame(page.screenshot(), page.content(), timestamp, page.url)
+    screenshot = page.screenshot(type="jpeg", quality=70) if fast else page.screenshot()
+    return Frame(screenshot, page.content(), timestamp, page.url)
 
 
 class FrameRecorder:

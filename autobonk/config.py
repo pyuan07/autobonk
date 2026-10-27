@@ -14,6 +14,8 @@ class Config:
     frames_dir: Path
     pause_hotkey: str
     frame_hotkey: str
+    steps_per_second: float
+    unknown_screen_pause_s: float
 
 
 def load_config(path: Path) -> Config:
@@ -25,6 +27,7 @@ def load_config(path: Path) -> Config:
     browser = data.get("browser", {})
     frames = data.get("frames", {})
     hotkeys = data.get("hotkeys", {})
+    bot = data.get("bot", {})
     pause_hotkey = hotkeys.get("pause", "f8").lower()
     frame_hotkey = hotkeys.get("frame", "f9").lower()
     if pause_hotkey == frame_hotkey:
@@ -37,4 +40,6 @@ def load_config(path: Path) -> Config:
         frames_dir=base / frames.get("dir", "fixtures/frames"),
         pause_hotkey=pause_hotkey,
         frame_hotkey=frame_hotkey,
+        steps_per_second=bot.get("steps_per_second", 10),
+        unknown_screen_pause_s=bot.get("unknown_screen_pause_s", 5),
     )

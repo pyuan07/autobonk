@@ -16,3 +16,9 @@ dir = "fixtures/frames"
 # Global hotkeys (work while the browser is unfocused).
 pause = "f8"
 frame = "f9"
+
+[bot]
+# How often the bot looks at the screen and decides.
+steps_per_second = 10
+# Pause if the screen can't be recognised for this long.
+unknown_screen_pause_s = 5

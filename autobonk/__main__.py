@@ -2,11 +2,13 @@
 
 import argparse
 import logging
+import time
 from pathlib import Path
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
+from autobonk.bot import Bot
 from autobonk.browser import launch
 from autobonk.config import load_config
 from autobonk.controller import Controller
@@ -15,8 +17,6 @@ from autobonk.frames import FrameRecorder, capture_frame
 from autobonk.hotkeys import start_hotkeys
 
 log = logging.getLogger("autobonk")
-
-POLL_MS = 50
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -37,21 +37,27 @@ def main(argv: list[str] | None = None) -> None:
             capture=lambda: capture_frame(page),
             recorder=FrameRecorder(config.frames_dir),
             driver=driver,
+            bot=Bot(config.unknown_screen_pause_s),
+            step_capture=lambda: capture_frame(page, fast=True),
         )
         listener = start_hotkeys({
             config.pause_hotkey: lambda: controller.submit("toggle_pause"),
             config.frame_hotkey: lambda: controller.submit("save_frame"),
         })
         log.info(
-            "Ready. %s = pause/resume, %s = save frame to %s. Close the browser or Ctrl+C to quit.",
+            "Ready. %s = start/pause the bot, %s = save frame to %s. Close the browser or Ctrl+C to quit.",
             config.pause_hotkey.upper(), config.frame_hotkey.upper(), config.frames_dir,
         )
         log.info("PAUSED")
 
         try:
+            step_s = 1 / config.steps_per_second
             while not page.is_closed():
+                started = time.monotonic()
                 controller.poll()
-                page.wait_for_timeout(POLL_MS)
+                controller.tick()
+                # wait_for_timeout keeps Playwright's event loop pumping, unlike time.sleep.
+                page.wait_for_timeout(max(10, (step_s - (time.monotonic() - started)) * 1000))
         except KeyboardInterrupt:
             pass
         except PlaywrightError as error:

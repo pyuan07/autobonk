@@ -1,8 +1,11 @@
 import logging
 import threading
 
+from autobonk.bot import Bot
 from autobonk.controller import Controller
 from autobonk.frames import Frame, FrameRecorder, load_frame
+
+WIN_HTML = "<div class='timer'>1:50</div><h2>胜利！</h2>"
 
 
 class FakeDriver:
@@ -13,13 +16,23 @@ class FakeDriver:
         self.calls.append("release_all")
 
 
-def make_controller(tmp_path, capture=None):
-    frame = Frame(b"png", "<html></html>", 1761600000.0, "https://pokebonk.com/")
+class FakeBot:
+    def __init__(self):
+        self.frames = []
+
+    def step(self, frame):
+        self.frames.append(frame)
+        return []
+
+
+def make_controller(tmp_path, capture=None, bot=None, html="<html></html>"):
+    frame = Frame(b"png", html, 1761600000.0, "https://pokebonk.com/")
     driver = FakeDriver()
     controller = Controller(
         capture=capture or (lambda: frame),
         recorder=FrameRecorder(tmp_path),
         driver=driver,
+        bot=bot or FakeBot(),
     )
     return controller, driver, frame
 
@@ -79,3 +92,38 @@ def test_failed_capture_is_logged_not_raised(tmp_path, caplog):
 
     assert "page closed" in caplog.text
     assert list(tmp_path.iterdir()) == []
+
+
+def test_tick_does_nothing_while_paused(tmp_path):
+    bot = FakeBot()
+    controller, _, _ = make_controller(tmp_path, bot=bot)
+
+    controller.tick()
+
+    assert bot.frames == []
+
+
+def test_tick_steps_the_bot_once_running(tmp_path):
+    bot = FakeBot()
+    controller, _, frame = make_controller(tmp_path, bot=bot)
+    controller.submit("toggle_pause")
+    controller.poll()
+
+    controller.tick()
+
+    assert bot.frames == [frame]
+
+
+def test_end_screen_stops_the_loop_with_keys_released(tmp_path, caplog):
+    controller, driver, _ = make_controller(tmp_path, bot=Bot(), html=WIN_HTML)
+    caplog.set_level(logging.INFO)
+    controller.submit("toggle_pause")
+    controller.poll()
+    driver.calls.clear()
+
+    controller.tick()
+    controller.tick()
+
+    assert controller.paused
+    assert driver.calls and set(driver.calls) == {"release_all"}
+    assert "STOPPED (win)" in caplog.text
