@@ -23,15 +23,84 @@ steps_per_second = 10
 # Pause if the screen can't be recognised for this long.
 unknown_screen_pause_s = 5
 
+[record]
+# While the bot is paused (you are playing), every popup pick you make is appended here,
+# with all the cards offered, so your choices can be studied to set card weights.
+choices_file = "logs/choices.jsonl"
+
 [cards]
-# How choice popups are answered (level-up now; item / Snorlax / Ditto popups later).
-# Card names exactly as the game shows them. Positive weight = prefer, negative = avoid,
-# unlisted = 0. The highest weight wins; equal weights fall back to rarity, then the leftmost card.
+# How choice popups are answered: level-up, item choice, fossil ruins/blessing, Porygon, Snorlax, Ditto.
+# Card names exactly as the game shows them (copy them from the log). Positive weight = prefer,
+# negative = avoid, unlisted = 0. The highest weight wins; equal weights fall back to rarity, then
+# the leftmost card. So any positive weight beats any unlisted card, whatever its rarity.
 # Refresh (F), Skip (X) and Banish (Z) are never used.
-weights = { }
-# Example:
-# weights = { "命中强化" = 5, "好伤药" = 3, "诅咒薰香" = -1 }
 
 # Best first. Anything not listed ranks below all of these. New-move cards show 招式 here;
 # add it (e.g. first) if you want new moves preferred.
-rarity_order = ["传说", "稀有", "少见", "普通"]
+rarity_order = ["招式", "传说", "史诗", "稀有", "少见", "普通"]
+
+# Tuned from the player's run recording (logs/choices.jsonl) with Mewtwo (超梦).
+# Special Psychic build focusing on high-scaling special moves, spell vamp/luck/haste vitamins, and relics.
+[cards.weights]
+# 10 = Top priority: build-defining relics, fossils, and fusion signatures
+"月之石" = 10
+"甲壳化石" = 10
+
+# 9 = Core special moves and essential vitamins (equal weight; rarity breaks ties)
+"精神击破" = 9
+"棱镜镭射" = 9
+"精神突进" = 9
+"幻象光线" = 9
+"广域战力" = 9
+"基因霸权" = 9
+"全满药" = 9
+"星星碎片" = 9
+"ＰＰ单项小补剂" = 9
+"ＰＰ多项全补剂" = 9
+"讲究眼镜" = 9
+
+# 8 = Damage blessings and high-tier stat bonuses
+"+38% 伤害" = 8
+"+21% 伤害" = 8
+"+14% 伤害" = 8
+"伤害" = 8
+"+22 幸运" = 8
+"+22% 经验" = 8
+"+21% 攻击速度" = 8
+"+18% 攻击速度" = 8
+"+14% 速度" = 8
+"+8% 速度" = 8
+
+# 7 = High-value chest items and secondary blessings
+"觉醒之石" = 7
+"神奇糖果" = 7
+"金刚宝珠" = 7
+"暗之石" = 7
+"ＰＰ极限提升剂" = 7
+"活力碎片" = 7
+"+47% 经验" = 7
+"+26% 经验" = 7
+"+15 幸运" = 7
+"+17% 范围" = 7
+"+14% 范围" = 7
+"+10% 速度" = 7
+
+# 6 = Useful utility chest items
+"白色玻璃哨" = 6
+"秘密钥匙" = 6
+
+# 5 = Early game / transitional moves and secondary stats
+"精神利刃" = 5
+"特攻增强剂" = 5
+
+# 4 = Late-game difficulty & XP scaling
+"诅咒薰香" = 4
+
+# Avoid (-5): Traps, unwanted physical/defensive moves, and rejected altar trade-offs
+"星星沙子" = -5
+"精神扭曲" = -5
+"贝壳化石" = -5
+"秘密琥珀" = -5
+"附着针" = -5
+"屏障" = -5
+"波导弹" = -5
