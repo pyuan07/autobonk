@@ -20,6 +20,10 @@ class KeyboardDriver:
                 self._keyboard.down(key)
                 self._held.add(key)
 
+    def press(self, key: str) -> None:
+        self._keyboard.down(key)
+        self._keyboard.up(key)
+
     def release_all(self) -> None:
         held, self._held = self._held, set()
         for key in held:

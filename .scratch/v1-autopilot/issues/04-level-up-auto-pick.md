@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Test: level-up frame with a weighted card in slot 4 → release movement, press "4"
-- [ ] Test: no listed cards → highest rarity wins; tie → leftmost
-- [ ] Test: F, X, Z are never emitted
-- [ ] Changing a weight in config changes the pick without code changes
-- [ ] Live: a full run's level-ups are all answered automatically
+- [x] Test: level-up frame with a weighted card in slot 4 → release movement, press "4"
+- [x] Test: no listed cards → highest rarity wins; tie → leftmost
+- [x] Test: F, X, Z are never emitted
+- [x] Changing a weight in config changes the pick without code changes
+- [x] Live: a full run's level-ups are all answered automatically

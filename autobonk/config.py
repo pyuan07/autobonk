@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from autobonk.cards import DEFAULT_RARITY_ORDER, CardPrefs
+
 
 @dataclass(frozen=True)
 class Config:
@@ -16,6 +18,7 @@ class Config:
     frame_hotkey: str
     steps_per_second: float
     unknown_screen_pause_s: float
+    cards: CardPrefs
 
 
 def load_config(path: Path) -> Config:
@@ -28,6 +31,7 @@ def load_config(path: Path) -> Config:
     frames = data.get("frames", {})
     hotkeys = data.get("hotkeys", {})
     bot = data.get("bot", {})
+    cards = data.get("cards", {})
     pause_hotkey = hotkeys.get("pause", "f8").lower()
     frame_hotkey = hotkeys.get("frame", "f9").lower()
     if pause_hotkey == frame_hotkey:
@@ -42,4 +46,8 @@ def load_config(path: Path) -> Config:
         frame_hotkey=frame_hotkey,
         steps_per_second=bot.get("steps_per_second", 10),
         unknown_screen_pause_s=bot.get("unknown_screen_pause_s", 5),
+        cards=CardPrefs(
+            weights=dict(cards.get("weights", {})),
+            rarity_order=tuple(cards.get("rarity_order", DEFAULT_RARITY_ORDER)),
+        ),
     )

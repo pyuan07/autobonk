@@ -1,5 +1,6 @@
 import logging
 import threading
+from pathlib import Path
 
 from autobonk.bot import Bot
 from autobonk.controller import Controller
@@ -14,6 +15,9 @@ class FakeDriver:
 
     def release_all(self):
         self.calls.append("release_all")
+
+    def press(self, key):
+        self.calls.append(f"press {key}")
 
 
 class FakeBot:
@@ -127,3 +131,16 @@ def test_end_screen_stops_the_loop_with_keys_released(tmp_path, caplog):
     assert controller.paused
     assert driver.calls and set(driver.calls) == {"release_all"}
     assert "STOPPED (win)" in caplog.text
+
+
+def test_pressed_card_key_reaches_the_driver_after_keys_are_released(tmp_path):
+    level_up = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-022221-064")
+    controller, driver, _ = make_controller(tmp_path, capture=lambda: level_up, bot=Bot())
+    controller.submit("toggle_pause")
+    controller.poll()
+    driver.calls.clear()
+
+    controller.tick()
+
+    assert driver.calls == ["release_all", "press 1"]
+    assert not controller.paused

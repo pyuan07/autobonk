@@ -22,3 +22,16 @@ frame = "f9"
 steps_per_second = 10
 # Pause if the screen can't be recognised for this long.
 unknown_screen_pause_s = 5
+
+[cards]
+# How choice popups are answered (level-up now; item / Snorlax / Ditto popups later).
+# Card names exactly as the game shows them. Positive weight = prefer, negative = avoid,
+# unlisted = 0. The highest weight wins; equal weights fall back to rarity, then the leftmost card.
+# Refresh (F), Skip (X) and Banish (Z) are never used.
+weights = { }
+# Example:
+# weights = { "命中强化" = 5, "好伤药" = 3, "诅咒薰香" = -1 }
+
+# Best first. Anything not listed ranks below all of these. New-move cards show 招式 here;
+# add it (e.g. first) if you want new moves preferred.
+rarity_order = ["传说", "稀有", "少见", "普通"]
