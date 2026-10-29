@@ -10,10 +10,12 @@ from playwright.sync_api import sync_playwright
 
 from autobonk.bot import Bot
 from autobonk.browser import launch
+from autobonk.choices import DRAIN_INPUTS_SCRIPT, RECORD_INPUTS_SCRIPT, ChoiceLog, Input
 from autobonk.config import load_config
 from autobonk.controller import Controller
 from autobonk.driver import KeyboardDriver
-from autobonk.frames import FrameRecorder, capture_frame
+from autobonk.frames import Frame, FrameRecorder, capture_frame
+from autobonk.perception import perceive
 from autobonk.hotkeys import start_hotkeys
 
 log = logging.getLogger("autobonk")
@@ -30,16 +32,26 @@ def main(argv: list[str] | None = None) -> None:
     with sync_playwright() as playwright:
         context = launch(playwright, config)
         page = context.pages[0] if context.pages else context.new_page()
+        context.add_init_script(RECORD_INPUTS_SCRIPT)
         page.goto(config.url)
 
         cdp = context.new_cdp_session(page)
-        driver = KeyboardDriver(page.keyboard)
+        driver = KeyboardDriver(page.keyboard, page)
+        choice_log = ChoiceLog(config.choices_file)
+
+        def watch_player() -> None:
+            """While paused: log which popup cards the player picks (DOM only, no screenshot)."""
+            inputs = [Input(i["kind"], i["value"]) for i in page.evaluate(DRAIN_INPUTS_SCRIPT)]
+            now = time.time()
+            choice_log.observe(perceive(Frame(b"", page.content(), now, page.url)).popup, inputs, now)
+
         controller = Controller(
             capture=lambda: capture_frame(page, cdp),
             recorder=FrameRecorder(config.frames_dir),
             driver=driver,
             bot=Bot(config.unknown_screen_pause_s, config.cards),
             step_capture=lambda: capture_frame(page, cdp, fast=True),
+            watch=watch_player,
         )
         listener = start_hotkeys({
             config.pause_hotkey: lambda: controller.submit("toggle_pause"),

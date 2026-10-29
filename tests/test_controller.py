@@ -19,6 +19,9 @@ class FakeDriver:
     def press(self, key):
         self.calls.append(f"press {key}")
 
+    def click(self, text):
+        self.calls.append(f"click {text}")
+
 
 class FakeBot:
     def __init__(self):
@@ -29,9 +32,9 @@ class FakeBot:
         return []
 
 
-def make_controller(tmp_path, capture=None, bot=None, html="<html></html>"):
+def make_controller(tmp_path, capture=None, bot=None, html="<html></html>", driver=None):
     frame = Frame(b"png", html, 1761600000.0, "https://pokebonk.com/")
-    driver = FakeDriver()
+    driver = driver or FakeDriver()
     controller = Controller(
         capture=capture or (lambda: frame),
         recorder=FrameRecorder(tmp_path),
@@ -144,3 +147,58 @@ def test_pressed_card_key_reaches_the_driver_after_keys_are_released(tmp_path):
 
     assert driver.calls == ["release_all", "press 1"]
     assert not controller.paused
+
+
+def test_clicked_text_reaches_the_driver(tmp_path):
+    hypno = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-022445-954")
+    controller, driver, _ = make_controller(tmp_path, capture=lambda: hypno, bot=Bot())
+    controller.submit("toggle_pause")
+    controller.poll()
+    driver.calls.clear()
+
+    controller.tick()
+
+    assert driver.calls == ["release_all", "click 就绪"]
+
+
+def test_failed_driver_command_pauses_instead_of_crashing(tmp_path, caplog):
+    class BrokenClickDriver(FakeDriver):
+        def click(self, text):
+            raise TimeoutError("not visible")
+
+    hypno = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-022445-954")
+    controller, _, _ = make_controller(tmp_path, capture=lambda: hypno, bot=Bot(), driver=BrokenClickDriver())
+    caplog.set_level(logging.INFO)
+    controller.submit("toggle_pause")
+    controller.poll()
+
+    controller.tick()
+
+    assert controller.paused
+    assert "not visible" in caplog.text
+
+
+def test_paused_tick_watches_the_player_instead_of_stepping(tmp_path):
+    bot, watched = FakeBot(), []
+    controller = Controller(
+        capture=lambda: None, recorder=FrameRecorder(tmp_path), driver=FakeDriver(), bot=bot,
+        watch=lambda: watched.append(True),
+    )
+
+    controller.tick()
+
+    assert watched == [True]
+    assert bot.frames == []
+
+
+def test_failed_watch_is_logged_not_raised(tmp_path, caplog):
+    def broken():
+        raise RuntimeError("page gone")
+
+    controller = Controller(
+        capture=lambda: None, recorder=FrameRecorder(tmp_path), driver=FakeDriver(), bot=FakeBot(), watch=broken,
+    )
+
+    controller.tick()
+
+    assert "page gone" in caplog.text

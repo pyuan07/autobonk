@@ -12,6 +12,7 @@ def test_missing_file_gives_defaults(tmp_path):
     assert (config.viewport_width, config.viewport_height) == (1600, 900)
     assert config.pause_hotkey == "f8"
     assert config.frame_hotkey == "f9"
+    assert config.choices_file == tmp_path / "logs" / "choices.jsonl"
 
 
 def test_file_overrides_defaults_and_paths_resolve_against_file(tmp_path):

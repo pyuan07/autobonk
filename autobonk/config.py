@@ -19,6 +19,7 @@ class Config:
     steps_per_second: float
     unknown_screen_pause_s: float
     cards: CardPrefs
+    choices_file: Path
 
 
 def load_config(path: Path) -> Config:
@@ -50,4 +51,5 @@ def load_config(path: Path) -> Config:
             weights=dict(cards.get("weights", {})),
             rarity_order=tuple(cards.get("rarity_order", DEFAULT_RARITY_ORDER)),
         ),
+        choices_file=base / data.get("record", {}).get("choices_file", "logs/choices.jsonl"),
     )

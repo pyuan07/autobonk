@@ -11,6 +11,7 @@ class Card:
     key: str
     name: str
     rarity: str
+    details: tuple[str, ...] = field(default=(), compare=False)  # effect text, for logs only
 
 
 @dataclass(frozen=True)

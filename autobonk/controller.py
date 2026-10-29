@@ -8,7 +8,7 @@ import logging
 import queue
 from typing import Callable, Literal, Protocol
 
-from autobonk.bot import Command, Pause, Press, ReleaseAll, Stop
+from autobonk.bot import Click, Command, Pause, Press, ReleaseAll, Stop
 from autobonk.frames import Frame, FrameRecorder
 
 log = logging.getLogger(__name__)
@@ -20,6 +20,8 @@ class Driver(Protocol):
     def release_all(self) -> None: ...
 
     def press(self, key: str) -> None: ...
+
+    def click(self, text: str) -> None: ...
 
 
 class StepsFrames(Protocol):
@@ -34,13 +36,16 @@ class Controller:
         driver: Driver,
         bot: StepsFrames,
         step_capture: Callable[[], Frame] | None = None,
+        watch: Callable[[], None] | None = None,
     ):
-        """`capture` feeds saved frames; `step_capture` (default: `capture`) feeds bot steps."""
+        """`capture` feeds saved frames; `step_capture` (default: `capture`) feeds bot steps;
+        `watch` runs instead of a bot step while paused (the player is playing)."""
         self._capture = capture
         self._step_capture = step_capture or capture
         self._recorder = recorder
         self._driver = driver
         self._bot = bot
+        self._watch = watch
         self._events: queue.Queue[Event] = queue.Queue()
         # Paused until the player hands over with the pause hotkey.
         self.paused = True
@@ -62,8 +67,13 @@ class Controller:
                 self._save_frame()
 
     def tick(self) -> None:
-        """Run one bot step if running. Call from the main (Playwright) thread."""
+        """Run one bot step if running, else watch the player. Call from the main (Playwright) thread."""
         if self.paused:
+            if self._watch:
+                try:
+                    self._watch()
+                except Exception as error:
+                    log.error("Watching the player failed: %s", error)
             return
         try:
             commands = self._bot.step(self._step_capture())
@@ -71,7 +81,11 @@ class Controller:
             self._halt(f"PAUSED (bot step failed: {error})")
             return
         for command in commands:
-            self._execute(command)
+            try:
+                self._execute(command)
+            except Exception as error:
+                self._halt(f"PAUSED ({command} failed: {error})")
+                return
 
     def _execute(self, command: Command) -> None:
         log.info("-> %s", command)
@@ -79,6 +93,8 @@ class Controller:
             self._driver.release_all()
         elif isinstance(command, Press):
             self._driver.press(command.key)
+        elif isinstance(command, Click):
+            self._driver.click(command.text)
         elif isinstance(command, Stop):
             self._halt(f"STOPPED ({command.reason})")
         elif isinstance(command, Pause):

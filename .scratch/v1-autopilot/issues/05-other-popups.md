@@ -6,7 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Test: item choice, blessing and copy frames → scored pick
-- [ ] Test: item pickup frame → E (never V/sell)
-- [ ] Test: forget frame → 就绪 clicked, no 忘记 buttons pressed
-- [ ] Test: unknown [1] popup → "1"; unknown modal without options → pause
+- [x] Test: item choice, blessing and copy frames → scored pick
+- [x] Test: item pickup frame → E (never V/sell)
+- [x] Test: forget frame → 就绪 clicked, no 忘记 buttons pressed
+- [x] Test: unknown [1] popup → "1"; unknown modal without options → pause
+- [ ] Live: a full run's popups are all answered (Ditto click and Hypno 就绪 click checked in the real game)

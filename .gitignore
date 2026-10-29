@@ -7,3 +7,5 @@ profile/
 .claude/settings.local.json
 *.egg-info/
 *.stackdump
+# Recorded popup picks (personal play data).
+logs/
