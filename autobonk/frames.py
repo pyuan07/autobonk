@@ -3,12 +3,13 @@
 A saved frame is three files sharing a stem: `<stem>.png`, `<stem>.html`, `<stem>.json`.
 """
 
+import base64
 import json
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Literal, Protocol
+from typing import Any, Callable, Protocol
 
 
 @dataclass(frozen=True)
@@ -23,15 +24,22 @@ class Page(Protocol):
     @property
     def url(self) -> str: ...
 
-    def screenshot(self, *, type: Literal["png", "jpeg"] = ..., quality: int | None = ...) -> bytes: ...
-
     def content(self) -> str: ...
 
 
-def capture_frame(page: Page, clock: Callable[[], float] = time.time, *, fast: bool = False) -> Frame:
-    """`fast` takes a JPEG (~50 ms) instead of a PNG (~400 ms+) for live bot steps; saved frames use PNG."""
+class CdpSession(Protocol):
+    def send(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]: ...
+
+
+def capture_frame(page: Page, cdp: CdpSession, clock: Callable[[], float] = time.time, *, fast: bool = False) -> Frame:
+    """`fast` takes a JPEG instead of a PNG for live bot steps; saved frames use PNG.
+
+    Screenshots go straight to Chrome over CDP with no clip: Playwright's page.screenshot sends
+    a clip, which makes the headed window visibly flash/resize on a scaled (e.g. 125%) display.
+    """
     timestamp = clock()
-    screenshot = page.screenshot(type="jpeg", quality=70) if fast else page.screenshot()
+    params: dict[str, Any] = {"format": "jpeg", "quality": 70} if fast else {"format": "png"}
+    screenshot = base64.b64decode(cdp.send("Page.captureScreenshot", params)["data"])
     return Frame(screenshot, page.content(), timestamp, page.url)
 
 

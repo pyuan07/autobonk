@@ -32,13 +32,14 @@ def main(argv: list[str] | None = None) -> None:
         page = context.pages[0] if context.pages else context.new_page()
         page.goto(config.url)
 
+        cdp = context.new_cdp_session(page)
         driver = KeyboardDriver(page.keyboard)
         controller = Controller(
-            capture=lambda: capture_frame(page),
+            capture=lambda: capture_frame(page, cdp),
             recorder=FrameRecorder(config.frames_dir),
             driver=driver,
-            bot=Bot(config.unknown_screen_pause_s),
-            step_capture=lambda: capture_frame(page, fast=True),
+            bot=Bot(config.unknown_screen_pause_s, config.cards),
+            step_capture=lambda: capture_frame(page, cdp, fast=True),
         )
         listener = start_hotkeys({
             config.pause_hotkey: lambda: controller.submit("toggle_pause"),
