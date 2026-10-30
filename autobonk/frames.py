@@ -1,6 +1,7 @@
-"""Frames: what the bot sees at one instant (screenshot + DOM snapshot + timestamp).
+"""Frames: what the bot sees at one instant (screenshot + DOM snapshot + minimap + timestamp).
 
-A saved frame is three files sharing a stem: `<stem>.png`, `<stem>.html`, `<stem>.json`.
+A saved frame is three files sharing a stem: `<stem>.png`, `<stem>.html`, `<stem>.json`, plus
+`<stem>.minimap.png` when a run's minimap was on screen.
 """
 
 import base64
@@ -18,6 +19,7 @@ class Frame:
     dom_snapshot: str
     timestamp: float
     url: str
+    minimap: bytes = b""  # PNG of the minimap canvas (400x400, player at the centre); empty outside a run
 
 
 class Page(Protocol):
@@ -25,6 +27,16 @@ class Page(Protocol):
     def url(self) -> str: ...
 
     def content(self) -> str: ...
+
+    def evaluate(self, expression: str) -> Any: ...
+
+
+# The minimap's own pixels, independent of window size and display scaling.
+# toDataURL throws on a canvas tainted by cross-origin images; then there's no minimap.
+MINIMAP_SCRIPT = """() => {
+  try { return document.querySelector('canvas.minimap')?.toDataURL('image/png') ?? ''; }
+  catch (error) { return ''; }
+}"""
 
 
 class CdpSession(Protocol):
@@ -40,7 +52,12 @@ def capture_frame(page: Page, cdp: CdpSession, clock: Callable[[], float] = time
     timestamp = clock()
     params: dict[str, Any] = {"format": "jpeg", "quality": 70} if fast else {"format": "png"}
     screenshot = base64.b64decode(cdp.send("Page.captureScreenshot", params)["data"])
-    return Frame(screenshot, page.content(), timestamp, page.url)
+    return Frame(screenshot, page.content(), timestamp, page.url, _minimap(page))
+
+
+def _minimap(page: Page) -> bytes:
+    data_url = page.evaluate(MINIMAP_SCRIPT)
+    return base64.b64decode(data_url.partition(",")[2]) if data_url else b""
 
 
 class FrameRecorder:
@@ -53,6 +70,8 @@ class FrameRecorder:
         stem = self._unique_stem(frame.timestamp)
         _file(stem, ".png").write_bytes(frame.screenshot)
         _file(stem, ".html").write_text(frame.dom_snapshot, encoding="utf-8")
+        if frame.minimap:
+            _file(stem, ".minimap.png").write_bytes(frame.minimap)
         meta = {
             "timestamp": frame.timestamp,
             "time": datetime.fromtimestamp(frame.timestamp).isoformat(timespec="milliseconds"),
@@ -79,6 +98,7 @@ def load_frame(stem: Path) -> Frame:
         dom_snapshot=_file(stem, ".html").read_text(encoding="utf-8"),
         timestamp=meta["timestamp"],
         url=meta["url"],
+        minimap=minimap.read_bytes() if (minimap := _file(stem, ".minimap.png")).exists() else b"",
     )
 
 

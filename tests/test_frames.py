@@ -12,6 +12,9 @@ class FakePage:
     def content(self):
         return self.html
 
+    def evaluate(self, script):
+        return ""  # no minimap canvas outside a run
+
 
 class FakeCdp:
     def __init__(self):
@@ -71,3 +74,35 @@ def test_screenshots_go_straight_to_chrome_without_a_clip():
 
     assert [method for method, _ in cdp.sent] == ["Page.captureScreenshot"] * 2
     assert all("clip" not in params for _, params in cdp.sent)
+
+
+MINIMAP_PNG = b"\x89PNG minimap"
+
+
+class FakeGamePage(FakePage):
+    """A page in a run: the minimap canvas hands back its own image as a data URL."""
+
+    def evaluate(self, script):
+        return "data:image/png;base64," + base64.b64encode(MINIMAP_PNG).decode()
+
+
+def test_frame_carries_the_minimap_canvas_image():
+    assert capture_frame(FakeGamePage(), FakeCdp(), clock=lambda: 0.0).minimap == MINIMAP_PNG
+
+
+def test_minimap_is_saved_beside_the_frame_and_loads_back(tmp_path):
+    frame = capture_frame(FakeGamePage(), FakeCdp(), clock=lambda: 0.0)
+
+    path = FrameRecorder(tmp_path).save(frame)
+
+    assert (tmp_path / (path.name + ".minimap.png")).read_bytes() == MINIMAP_PNG
+    assert load_frame(path) == frame
+
+
+def test_without_a_minimap_canvas_the_frame_has_no_minimap(tmp_path):
+    frame = capture_frame(FakePage(), FakeCdp(), clock=lambda: 0.0)
+    path = FrameRecorder(tmp_path).save(frame)
+
+    assert frame.minimap == b""
+    assert not (tmp_path / (path.name + ".minimap.png")).exists()
+    assert load_frame(path).minimap == b""

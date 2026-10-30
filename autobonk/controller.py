@@ -112,8 +112,9 @@ class Controller:
 
     def _save_frame(self) -> None:
         try:
-            path = self._recorder.save(self._capture())
+            frame = self._capture()
+            path = self._recorder.save(frame)
         except Exception as error:
             log.error("Could not save frame: %s", error)
             return
-        log.info("Saved frame %s", path)
+        log.info("Saved frame %s%s", path, " + minimap" if frame.minimap else " (no minimap)")
