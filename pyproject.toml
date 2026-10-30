@@ -11,13 +11,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "mypy>=1.10"]
 
 [project.scripts]
 autobonk = "autobonk.__main__:main"
 
-[tool.setuptools]
-packages = ["autobonk"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["autobonk*"]
 
 [tool.setuptools.package-data]
 autobonk = ["*.json", "*.html", "*.png", "icons/*.png"]

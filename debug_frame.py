@@ -5,25 +5,18 @@ import math
 import sys
 from pathlib import Path
 
-from autobonk.bot import ALTAR, BOSS, Bot, Movement
 from autobonk.config import load_config
 from autobonk.frames import load_frame
+from autobonk.game import ALTAR, BOSS
 from autobonk.perception import perceive
+from autobonk.policy.bot import Bot
 
 
 def debug_frame(stem_path: Path, config_path: Path = Path("autobonk.toml"), save_overlay: bool = True) -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     cfg = load_config(config_path)
 
-    mov = Movement(
-        jump_interval_s=cfg.jump_interval_s,
-        altar_charge_cap_s=cfg.altar_charge_cap_s,
-        target_ignore_s=cfg.target_ignore_s,
-        stuck_s=cfg.stuck_s,
-        sidestep_s=cfg.sidestep_s,
-        distance_factor=cfg.distance_factor,
-    )
-    bot = Bot(cards=cfg.cards, movement=mov, targets=cfg.targets, boss=cfg.boss)
+    bot = Bot(cards=cfg.cards, movement=cfg.movement, targets=cfg.targets, boss=cfg.boss)
 
     frame = load_frame(stem_path)
     obs = perceive(frame, bot._icons)

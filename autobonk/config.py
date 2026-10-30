@@ -4,8 +4,9 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from autobonk.bot import BossRule, Weight
-from autobonk.cards import DEFAULT_RARITY_ORDER, CardPrefs
+from autobonk.game import BossRule, Weight
+from autobonk.policy.bot import Movement
+from autobonk.policy.cards import DEFAULT_RARITY_ORDER, CardPrefs
 
 
 @dataclass(frozen=True)
@@ -25,15 +26,25 @@ class Config:
     jump_interval_s: tuple[float, float] = (0.8, 1.4)
     altar_charge_cap_s: float = 45.0
     target_ignore_s: float = 60.0
-    # Map icon name -> weight, or (start, end) growing as the zone's time runs out ([targets.weights]).
     targets: dict[str, Weight] = field(default_factory=lambda: {"符文祭坛": 10.0})
-    boss: BossRule = BossRule()  # [targets.boss]
+    boss: BossRule = BossRule()
     stuck_s: float = 2.5
     sidestep_s: float = 0.6
     distance_factor: float = 0.2
     banish_threshold: float | None = -5.0
     reroll_threshold: float | None = 0.0
     skip_threshold: float | None = 0.0
+
+    @property
+    def movement(self) -> Movement:
+        return Movement(
+            jump_interval_s=self.jump_interval_s,
+            altar_charge_cap_s=self.altar_charge_cap_s,
+            target_ignore_s=self.target_ignore_s,
+            stuck_s=self.stuck_s,
+            sidestep_s=self.sidestep_s,
+            distance_factor=self.distance_factor,
+        )
 
 
 def load_config(path: Path) -> Config:
@@ -69,6 +80,7 @@ def load_config(path: Path) -> Config:
         targets_data["超级球"] = targets_data["礼物球"]
     elif "超级球" in targets_data and "礼物球" not in targets_data:
         targets_data["礼物球"] = targets_data["超级球"]
+
     return Config(
         url=browser.get("url", "https://pokebonk.com/"),
         profile_dir=base / browser.get("profile_dir", "profile"),

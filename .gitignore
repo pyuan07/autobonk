@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.mypy_cache/
 # Chrome profile holds the logged-in session; never commit it.
 profile/
 .claude/settings.local.json
@@ -9,3 +10,7 @@ profile/
 *.stackdump
 # Recorded popup picks (personal play data).
 logs/
+
+# Scratch debug files
+.scratch/*
+!.scratch/v1-autopilot/
