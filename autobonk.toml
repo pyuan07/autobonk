@@ -24,8 +24,10 @@ steps_per_second = 10
 unknown_screen_pause_s = 5
 # During play, jump (Space) after a random wait in this range, in seconds.
 jump_interval_s = [0.8, 1.4]
-# Stand in a rune altar's ring at most this long while it charges, then move on.
+# Stand in a rune altar's ring at most this long while it charges, then explore elsewhere
+# for altar_ignore_s before coming back. Sealed altars (封印中) are left until they wake.
 altar_charge_cap_s = 45
+altar_ignore_s = 60
 # Walking with no progress toward the target for this long counts as stuck:
 # step left (next time right) for sidestep_s, then walk on.
 stuck_s = 2.5

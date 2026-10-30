@@ -18,6 +18,8 @@ CARD_KEY = re.compile(r"\[(\d)\]")
 # The progress bubble over a rune altar (or ore pile) the player stands in: a bare "29%".
 CHARGE = re.compile(r"\d{1,3}%")
 ZONE = re.compile(r"区域 \d+/\d+")
+# Over a rune altar that can't be charged yet: "封印中・13秒后苏醒".
+SEALED = re.compile(r"封印中.(\d+)秒后苏醒")
 # The "还有 N 个图像未加载 [重试]" corner notice is not a popup.
 IGNORED_BUTTONS = {"重试"}
 # Buttons that close a popup without choosing anything.
@@ -50,6 +52,7 @@ class Observation:
     zonemap: ZoneMap | None = None  # only while Tab is held
     zone: str | None = None  # "区域 1/3"
     team_view: bool = False  # the team view covers the popup: its keys do nothing until it closes
+    sealed_s: int | None = None  # an altar on screen is sealed for this many more seconds
 
     @property
     def recognised(self) -> bool:
@@ -66,9 +69,11 @@ def perceive(frame: Frame) -> Observation:
     charging = any(tag == "span" and CHARGE.fullmatch(text) for tag, text in nodes)
     zone = next((t for t in texts if ZONE.fullmatch(t)), None)
     team_view = ("button", TEAM_VIEW_BUTTON) in nodes
+    sealed = next((m for m in map(SEALED.fullmatch, texts) if m), None)
     return Observation(
         end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
         north_bearing(frame.minimap), read_zonemap(frame.zonemap), zone, team_view,
+        int(sealed.group(1)) if sealed else None,
     )
 
 

@@ -249,9 +249,10 @@ def test_gives_up_on_an_altar_that_charges_longer_than_the_cap():
     bot.step(run_frame("155222-698", 100.0))  # charging starts
     bot.step(run_frame("155227-456", 144.0))
 
-    # Past the cap the altar is ignored (no steering back onto it) until the bubble goes away.
-    assert holds(bot.step(run_frame("155227-456", 146.0))) == []
-    assert holds(bot.step(run_frame("155220-116", 147.0))) == [Hold(frozenset({"KeyW"}))]
+    # Past the cap the altar is left: hold Tab to explore elsewhere, for altar_ignore_s.
+    assert holds(bot.step(run_frame("155227-456", 146.0))) == [Hold(frozenset({"Tab"}))]
+    assert holds(bot.step(run_frame("155220-116", 147.0))) == []
+    assert holds(bot.step(run_frame("155220-116", 207.0))) == [Hold(frozenset({"KeyW"}))]
 
 
 def holds(commands):
@@ -385,3 +386,19 @@ def test_after_the_team_view_closes_the_card_is_chosen():
 def test_a_plain_popup_is_not_the_team_view():
     assert not perceive(LEVEL_UP).team_view
     assert perceive(TEAM_VIEW).team_view
+
+
+SEALED = run_frame("173711-697", 100.0)  # standing on an altar: 封印中・13秒后苏醒
+
+
+def test_reads_how_long_an_altar_stays_sealed():
+    assert perceive(SEALED).sealed_s == 13
+    assert perceive(run_frame("155220-116", 0.0)).sealed_s is None
+
+
+def test_a_sealed_altar_is_left_to_explore_until_it_wakes():
+    bot = Bot()
+
+    assert holds(bot.step(SEALED)) == [Hold(frozenset({"Tab"}))]
+    assert holds(bot.step(run_frame("155220-116", 112.0))) == []  # an altar ahead, still ignored
+    assert holds(bot.step(run_frame("155220-116", 113.0))) == [Hold(frozenset({"KeyW"}))]

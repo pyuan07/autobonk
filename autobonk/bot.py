@@ -78,6 +78,7 @@ class Uniform(Protocol):
 class Movement:
     jump_interval_s: tuple[float, float] = (0.8, 1.4)
     altar_charge_cap_s: float = 45.0
+    altar_ignore_s: float = 60.0  # after the cap, explore elsewhere this long before coming back
     stuck_s: float = 2.5  # no progress toward the target this long: sidestep
     sidestep_s: float = 0.6
     rng: Uniform = field(default_factory=random.Random)
@@ -93,7 +94,7 @@ class Bot:
         self._held: frozenset[str] = frozenset()
         self._next_jump: float | None = None
         self._charging_since: float | None = None
-        self._altars_ignored = False  # an altar outlasted the charge cap; ignored until its bubble goes
+        self._altars_ignored_until = 0.0  # altars sealed or outlasting the charge cap: explore meanwhile
         self._zone: str | None = None
         self._visited: set[tuple[int, int]] = set()  # zone-map cells the player has been in
         self._heading: float | None = None  # exploring toward this compass bearing (north-up)
@@ -143,20 +144,25 @@ class Bot:
         return commands
 
     def _move(self, observation: Observation, now: float) -> list[Command]:
-        """Walk to the nearest rune altar; stand in its ring while it charges (up to the cap)."""
+        """Walk to the nearest rune altar; stand in its ring while it charges (up to the cap).
+        Sealed altars, and ones still charging at the cap, are left for a while to explore."""
+        ignored = now < self._altars_ignored_until
+        if observation.sealed_s is not None and not ignored:
+            log.info("altar sealed for %d s: exploring meanwhile", observation.sealed_s)
+            self._altars_ignored_until = now + observation.sealed_s
         if observation.charging:
             if self._charging_since is None:
                 self._charging_since = now
-            if now - self._charging_since > self._movement.altar_charge_cap_s and not self._altars_ignored:
+            if now - self._charging_since > self._movement.altar_charge_cap_s and not ignored:
                 log.info("altar still charging after %g s: moving on", self._movement.altar_charge_cap_s)
-                self._altars_ignored = True
+                self._altars_ignored_until = now + self._movement.altar_ignore_s
         else:
             self._charging_since = None
-            self._altars_ignored = False
+        ignored = now < self._altars_ignored_until
 
         keys: frozenset[str] = frozenset()
-        if self._altars_ignored:
-            keys = self._held
+        if ignored:
+            keys = self._explore(observation, altars=False)
         elif observation.charging:
             pass
         elif observation.altars:
@@ -166,21 +172,22 @@ class Bot:
                 keys = _direction(self._bearing)
         else:
             keys = self._explore(observation)
-        keys = self._unstick(keys, observation, now)
+        keys = self._unstick(keys, observation, now, altars=not ignored)
         if keys == self._held:
             return []
         self._held = keys
         return [Hold(keys)]
 
-    def _explore(self, observation: Observation) -> frozenset[str]:
-        """Nothing on the minimap: hold Tab and head for a discovered altar on the zone map,
-        else the nearest unvisited cell, turning the north-up bearing into minimap-up WASD."""
+    def _explore(self, observation: Observation, altars: bool = True) -> frozenset[str]:
+        """Nothing on the minimap: hold Tab and head for a discovered altar on the zone map
+        (unless `altars` is off), else the nearest unvisited cell, turning the north-up
+        bearing into minimap-up WASD."""
         if observation.zone != self._zone:
             self._zone, self._visited, self._heading = observation.zone, set(), None
         zone = observation.zonemap
         if zone:
             self._visited.add(_cell(zone.player))
-            target = min(zone.altars, key=lambda a: _distance(zone.player, a), default=None)
+            target = min(zone.altars if altars else (), key=lambda a: _distance(zone.player, a), default=None)
             if target is None:
                 target = self._nearest_unvisited(zone.player)
             dx, dy = target[0] - zone.player[0], target[1] - zone.player[1]
@@ -190,7 +197,7 @@ class Bot:
         self._bearing = observation.north + self._heading
         return _direction(self._bearing) | {MAP_KEY}
 
-    def _unstick(self, keys: frozenset[str], observation: Observation, now: float) -> frozenset[str]:
+    def _unstick(self, keys: frozenset[str], observation: Observation, now: float, altars: bool = True) -> frozenset[str]:
         """Walking without progress for `stuck_s`: step left (then right, alternating) for `sidestep_s`."""
         if self._sidestep:
             sidestep, until = self._sidestep
@@ -200,7 +207,7 @@ class Bot:
         if not keys - {MAP_KEY} or self._bearing is None:
             self._progress = None
             return keys
-        if observation.altars:
+        if observation.altars and altars:
             mark: object = math.hypot(*observation.altars[0])
             progressed = lambda last: last - mark >= ALTAR_PROGRESS_PX  # noqa: E731
         elif observation.zonemap:
