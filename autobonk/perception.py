@@ -22,6 +22,8 @@ ZONE = re.compile(r"区域 \d+/\d+")
 IGNORED_BUTTONS = {"重试"}
 # Buttons that close a popup without choosing anything.
 LEAVE_BUTTONS = ("离开", "以后再说")
+# The team view ("你的队伍") laid over a choice popup; its button goes back to the choice.
+TEAM_VIEW_BUTTON = "返回选择"
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,7 @@ class Observation:
     north: float | None = None  # 北 on the minimap rim, degrees clockwise from minimap-up
     zonemap: ZoneMap | None = None  # only while Tab is held
     zone: str | None = None  # "区域 1/3"
+    team_view: bool = False  # the team view covers the popup: its keys do nothing until it closes
 
     @property
     def recognised(self) -> bool:
@@ -62,9 +65,10 @@ def perceive(frame: Frame) -> Observation:
     altars = tuple(sorted(find_altars(frame.minimap), key=lambda p: p[0] ** 2 + p[1] ** 2))
     charging = any(tag == "span" and CHARGE.fullmatch(text) for tag, text in nodes)
     zone = next((t for t in texts if ZONE.fullmatch(t)), None)
+    team_view = ("button", TEAM_VIEW_BUTTON) in nodes
     return Observation(
         end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
-        north_bearing(frame.minimap), read_zonemap(frame.zonemap), zone,
+        north_bearing(frame.minimap), read_zonemap(frame.zonemap), zone, team_view,
     )
 
 

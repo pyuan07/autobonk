@@ -18,6 +18,7 @@ POPUP_RETRY_S = 1.0
 PICK_UP_BUTTON = "拾取"  # item pickup; its neighbour 出售 (sell) is never used
 READY_BUTTON = "就绪"  # Hypno: close without forgetting a move
 DITTO_TITLE = "百变怪"
+TEAM_VIEW = "你的队伍"
 # Key caps as shown in the game -> keyboard key names.
 KEY_NAMES = {"Esc": "Escape"}
 JUMP_KEY = "Space"
@@ -110,6 +111,11 @@ class Bot:
 
         if observation.end_screen:
             return self._release([ReleaseAll(), Stop(observation.end_screen)])
+
+        if observation.team_view:
+            self._unrecognised_since = None
+            self._next_jump = None
+            return self._release(self._close_team_view(frame.timestamp))
 
         if observation.popup:
             self._unrecognised_since = None
@@ -232,6 +238,15 @@ class Bot:
             return []
         self._next_jump = now + self._movement.rng.uniform(*self._movement.jump_interval_s)
         return [Press(JUMP_KEY)]
+
+    def _close_team_view(self, now: float) -> list[Command]:
+        """Letting go of Tab while a choice popup is open (it came up mid-exploration) opens the
+        team view over it. Tab goes back to the choice."""
+        if self._answered and self._answered[0] == TEAM_VIEW and now - self._answered[1] < POPUP_RETRY_S:
+            return []
+        self._answered = (TEAM_VIEW, now)
+        log.info("team view open over the popup: Tab back to the choice")
+        return [ReleaseAll(), Press(MAP_KEY)]
 
     def _answer(self, popup: Popup, now: float) -> list[Command]:
         if self._answered and self._answered[0] == popup.title and now - self._answered[1] < POPUP_RETRY_S:

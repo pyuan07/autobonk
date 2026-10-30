@@ -360,3 +360,28 @@ def test_moving_closer_is_not_stuck():
     bot.step(run_frame("155220-116", 102.0))  # 47 px: progress, the stuck timer restarts
 
     assert holds(bot.step(run_frame("155220-116", 104.0))) == []  # only 2 s without progress
+
+
+TEAM_VIEW = run_frame("172455-857", 100.0)  # 等级 11！ with 你的队伍 laid over it (Tab let go mid-popup)
+
+
+def test_team_view_over_a_popup_is_closed_with_tab_before_choosing():
+    bot = Bot()
+
+    assert bot.step(TEAM_VIEW) == [ReleaseAll(), Press("Tab")]
+    assert bot.step(replace(TEAM_VIEW, timestamp=100.5)) == []
+    assert bot.step(replace(TEAM_VIEW, timestamp=101.0)) == [ReleaseAll(), Press("Tab")]
+
+
+def test_after_the_team_view_closes_the_card_is_chosen():
+    bot = Bot()
+    bot.step(TEAM_VIEW)
+
+    [release, press] = bot.step(replace(LEVEL_UP, timestamp=100.2))
+
+    assert release == ReleaseAll() and press.key in "1234"
+
+
+def test_a_plain_popup_is_not_the_team_view():
+    assert not perceive(LEVEL_UP).team_view
+    assert perceive(TEAM_VIEW).team_view
