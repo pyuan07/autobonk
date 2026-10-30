@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PokéBonk 权重配置</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #1b1e2e;
+      --panel: #232739;
+      --panel-2: #2b3046;
+      --line: #353b55;
+      --ink: #e9ecf5;
+      --muted: #9097b0;
+      --faint: #6a7190;
+      --accent: #6f93ff;
+
+      --w-high: #f2c14e;
+      --w-pos: #3cc5a8;
+      --w-neg: #ef5b5b;
+      --w-zero: #6a7190;
+
+      --r-legend: #f2c14e;
+      --r-epic: #c07bff;
+      --r-rare: #4fa3ff;
+      --r-uncommon: #4fd17f;
+      --r-common: #9097b0;
+      --r-move: #ff7a59;
+      --r-vitamin: #8f7bff;
+      --r-blessing: #ff9ecb;
+      --r-other: #e6a23c;
+
+      --num: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+      --sans: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: dark; }
+    body {
+      font: 14px/1.5 var(--sans);
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    [hidden] { display: none !important; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+    /* ---------- Top bar ---------- */
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; gap: 16px;
+      padding: 10px 20px;
+      background: rgba(27, 30, 46, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar h1 { font: 600 17px/1.2 var(--num); letter-spacing: 0.01em; white-space: nowrap; }
+    .topbar .path { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .topbar .spacer { flex: 1; }
+    .sync { font-size: 13px; color: var(--muted); white-space: nowrap; }
+    .sync.dirty { color: var(--w-high); }
+    .btn {
+      border: 1px solid var(--line); background: var(--panel-2);
+      padding: 6px 14px; border-radius: 8px; font-size: 13px;
+    }
+    .btn:hover { border-color: var(--faint); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d1430; font-weight: 600; }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-primary:disabled { opacity: 0.6; cursor: default; }
+    .btn-primary.dirty { background: var(--w-high); border-color: var(--w-high); color: #2a1f00; }
+    kbd { font: 11px var(--num); opacity: 0.7; margin-left: 6px; }
+
+    /* ---------- Layout ---------- */
+    .layout {
+      display: grid; grid-template-columns: 264px minmax(0, 1fr);
+      gap: 20px; padding: 20px; max-width: 1440px; margin: 0 auto;
+    }
+    aside { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 72px; align-self: start; max-height: calc(100vh - 92px); overflow: auto; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .panel h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+    .panel .hint { font-size: 12px; color: var(--faint); margin-top: 8px; }
+
+    /* Profiles */
+    .profiles { display: flex; flex-direction: column; gap: 4px; }
+    .profile-line { display: flex; align-items: center; gap: 2px; }
+    .profile {
+      display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+      padding: 7px 10px; border-radius: 8px; border: 1px solid transparent;
+      background: none; text-align: left;
+    }
+    .profile:hover { background: var(--panel-2); }
+    .profile.selected { background: var(--panel-2); border-color: var(--accent); }
+    .profile .pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .profile .pcount { font: 12px var(--num); color: var(--faint); }
+    .tag-active { font-size: 11px; font-weight: 700; color: #0d2a1f; background: var(--w-pos); padding: 0 6px; border-radius: 4px; }
+    .profile-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .profile-actions .btn { padding: 4px 10px; font-size: 12px; }
+    .link-btn { background: none; border: none; color: var(--muted); font-size: 12px; padding: 2px 6px; border-radius: 4px; }
+    .link-btn:hover { color: var(--ink); background: var(--panel-2); }
+    .link-btn.danger:hover { color: var(--w-neg); }
+
+    /* Rarity order */
+    .rarity-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .rarity-list li {
+      display: flex; align-items: center; gap: 8px;
+      padding: 3px 4px 3px 10px; border-radius: 6px; background: var(--panel-2);
+    }
+    .rarity-list .rank { font: 13px var(--num); color: var(--faint); width: 14px; }
+    .rarity-list .rname { flex: 1; color: var(--rc); }
+    .rarity-list button { background: none; border: none; color: var(--muted); width: 26px; height: 24px; border-radius: 4px; }
+    .rarity-list button:hover:not(:disabled) { background: var(--line); color: var(--ink); }
+    .rarity-list button:disabled { opacity: 0.25; cursor: default; }
+
+    /* Summary */
+    .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .summary div { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
+    .summary b { display: block; font: 600 20px/1.1 var(--num); }
+    .summary span { font-size: 12px; color: var(--muted); }
+
+    /* ---------- Toolbar ---------- */
+    .toolbar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .toolbar-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .search { flex: 1; min-width: 200px; position: relative; }
+    .search input {
+      width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 36px 8px 12px; outline: none;
+    }
+    .search input:focus { border-color: var(--accent); }
+    .search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin: 0; }
+    select.sort { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+
+    .segments { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; flex-wrap: wrap; align-self: flex-start; }
+    .segments button { background: none; border: none; padding: 5px 12px; border-radius: 7px; color: var(--muted); font-size: 13px; }
+    .segments button:hover { color: var(--ink); }
+    .segments button.on { background: var(--panel-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+    .segments .n { font: 12px var(--num); color: var(--faint); margin-left: 5px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
+    .chip { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+    .chip:hover { color: var(--ink); }
+    .chip.on { border-color: var(--accent); color: var(--ink); background: rgba(111, 147, 255, 0.12); }
+
+    .notice {
+      background: rgba(255, 158, 203, 0.07); border: 1px solid rgba(255, 158, 203, 0.28);
+      border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #ecd3df; margin-bottom: 16px; max-width: 80ch;
+    }
+    .notice b { color: var(--r-blessing); }
+
+    /* ---------- Tiers + rows ---------- */
+    .tier { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; margin-bottom: 20px; }
+    .tier-label { text-align: right; padding-top: 6px; position: sticky; top: 72px; align-self: start; }
+    .tier-label b { display: block; font: 700 34px/1 var(--num); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .tier-label span { font-size: 12px; color: var(--faint); }
+    .tier.high .tier-label b { color: var(--w-high); }
+    .tier.pos .tier-label b { color: var(--w-pos); }
+    .tier.neg .tier-label b { color: var(--w-neg); }
+    .tier.zero .tier-label b { color: var(--w-zero); font-size: 20px; padding-top: 6px; }
+    .rows { display: flex; flex-direction: column; gap: 6px; }
+
+    .row {
+      display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 10px 0;
+      overflow: hidden;
+    }
+    .row:hover { border-color: #464d6b; }
+    .row .edge { align-self: stretch; margin: -10px 0; background: var(--rc, var(--faint)); }
+    .row.w-neg { background: color-mix(in srgb, var(--w-neg) 6%, var(--panel)); }
+    .row.w-high { background: color-mix(in srgb, var(--w-high) 5%, var(--panel)); }
+    .row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .row-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .row-title .name { font-weight: 600; font-size: 15px; }
+    .badge { font-size: 11px; padding: 0 6px; border-radius: 4px; color: var(--rc, var(--muted)); background: color-mix(in srgb, var(--rc, var(--muted)) 15%, transparent); }
+    .badge.plain { --rc: var(--muted); }
+    .badge.override { --rc: var(--accent); }
+    .badge.dmg { font-weight: 700; }
+    .badge.dmg.phys { --rc: #ff6b6b; }
+    .badge.dmg.spec { --rc: #74c0fc; }
+    .badge.tag-own { --rc: #e8b64c; }
+    .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; font-size: 12px; color: var(--muted); }
+    .stats b { font: 600 12.5px var(--num); color: var(--text); margin-left: 4px; }
+    .desc { font-size: 12.5px; color: var(--muted); max-width: 80ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .inherit { font-size: 12px; color: var(--faint); }
+
+    .controls { display: flex; align-items: center; gap: 10px; }
+    .presets { display: flex; gap: 3px; }
+    .presets button {
+      font: 12px var(--num); min-width: 32px; padding: 4px 0; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--muted);
+    }
+    .presets button:hover { color: var(--ink); border-color: var(--faint); }
+    .presets button.cur { color: var(--bg); border-color: transparent; background: var(--wc); font-weight: 600; }
+    .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .stepper button { background: var(--panel-2); border: none; width: 28px; height: 30px; color: var(--muted); font-size: 16px; }
+    .stepper button:hover { color: var(--ink); background: var(--line); }
+    .stepper input {
+      width: 46px; height: 30px; text-align: center; border: none; background: var(--bg);
+      font: 700 16px var(--num); color: var(--wc); outline: none; -moz-appearance: textfield;
+    }
+    .stepper input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+    .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .w-high { --wc: var(--w-high); }
+    .w-pos { --wc: var(--w-pos); }
+    .w-neg { --wc: var(--w-neg); }
+    .w-zero { --wc: var(--w-zero); }
+
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty .btn { margin-top: 12px; }
+
+    /* ---------- Dialogs / toast ---------- */
+    dialog {
+      margin: auto; width: min(460px, calc(100vw - 32px));
+      background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 20px;
+    }
+    dialog::backdrop { background: rgba(10, 12, 20, 0.6); backdrop-filter: blur(3px); }
+    dialog h2 { font-size: 16px; margin-bottom: 14px; }
+    .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .field label { font-size: 12px; color: var(--muted); }
+    .field input, .field select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+    .field small { font-size: 12px; color: var(--faint); }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translate(-50%, 16px); opacity: 0;
+      background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--w-pos);
+      padding: 10px 16px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      transition: opacity 0.2s, transform 0.2s; z-index: 100; pointer-events: none; max-width: calc(100vw - 32px);
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { border-left-color: var(--w-neg); }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; padding: 16px; }
+      aside { position: static; max-height: none; }
+      .topbar { padding: 10px 16px; }
+      .topbar .path, .topbar kbd { display: none; }
+      .topbar { gap: 10px; }
+      .topbar h1 { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      .topbar .btn-primary { flex-shrink: 0; white-space: nowrap; }
+      .sync:not(.dirty) { display: none; }
+      .row { grid-template-columns: 4px minmax(0, 1fr); }
+      .controls { grid-column: 2; flex-wrap: wrap; }
+      .tier { grid-template-columns: 1fr; gap: 6px; }
+      .tier-label { position: static; text-align: left; display: flex; align-items: baseline; gap: 8px; }
+      .tier-label b { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <h1>PokéBonk 卡牌与宝可梦权重配置</h1>
+    <span class="path" id="configPath"></span>
+    <span class="spacer"></span>
+    <span class="sync" id="syncState">已同步</span>
+    <button class="btn btn-primary" id="saveBtn">保存<kbd>Ctrl S</kbd></button>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <section class="panel">
+        <h2>配置方案</h2>
+        <div class="profiles" id="profiles"></div>
+        <div class="profile-actions">
+          <button class="btn" id="setActiveBtn"></button>
+          <button class="btn" id="newProfileBtn">+ 新建宝可梦方案</button>
+        </div>
+        <p class="hint">机器人先用「通用基准」，再叠加出战宝可梦的专属权重。</p>
+      </section>
+
+      <section class="panel">
+        <h2>同分时的稀有度顺序</h2>
+        <ol class="rarity-list" id="rarityList"></ol>
+        <p class="hint">权重相同时，排在前面的稀有度优先。</p>
+      </section>
+
+      <section class="panel">
+        <h2 id="summaryTitle">当前方案</h2>
+        <div class="summary">
+          <div><b id="sumSet">0</b><span>已设权重</span></div>
+          <div><b id="sumHigh" style="color:var(--w-high)">0</b><span>核心 ≥ 8</span></div>
+          <div><b id="sumAvoid" style="color:var(--w-neg)">0</b><span>避开 &lt; 0</span></div>
+          <div><b id="sumOverride" style="color:var(--accent)">0</b><span>专属覆盖</span></div>
+        </div>
+      </section>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <label class="search">
+            <input type="search" id="search" placeholder="搜索名称、属性或效果" aria-label="搜索卡牌">
+            <kbd>/</kbd>
+          </label>
+          <select class="sort" id="sort" aria-label="排序">
+            <option value="weight">按权重分组</option>
+            <option value="rarity">按稀有度</option>
+            <option value="name">按名称</option>
+          </select>
+          <button class="btn" id="addCardBtn">+ 添加卡牌</button>
+        </div>
+        <div class="segments" id="categories" role="tablist" aria-label="分类"></div>
+        <div class="chips" id="subFilters"></div>
+      </div>
+      <div id="notice"></div>
+      <div id="list"></div>
+    </main>
+  </div>
+
+  <dialog id="addCardDialog">
+    <form method="dialog">
+      <h2>添加卡牌</h2>
+      <div class="field">
+        <label for="newName">名称</label>
+        <input id="newName" required placeholder="例如：喷射火焰、+生命偷取">
+        <small>必须与游戏里显示的完全一致（注意全角符号）。属性祝福写「+属性」即可匹配所有数值。</small>
+      </div>
+      <div class="field">
+        <label for="newCategory">分类</label>
+        <select id="newCategory">
+          <option value="招式">招式</option>
+          <option value="道具">道具</option>
+          <option value="维生素">维生素</option>
+          <option value="祝福">祝福</option>
+          <option value="其他">化石 / 祭坛 / 其他</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="newPokemon">所属宝可梦（仅招式）</label>
+        <select id="newPokemon"></select>
+      </div>
+      <div class="field">
+        <label for="newDesc">效果说明（可选）</label>
+        <input id="newDesc">
+      </div>
+      <div class="field">
+        <label for="newWeight">权重</label>
+        <input id="newWeight" type="number" value="5" step="1">
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel" formnovalidate>取消</button>
+        <button class="btn btn-primary" value="ok">添加</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="profileDialog">
+    <form method="dialog">
+      <h2>新建宝可梦方案</h2>
+      <div class="field">
+        <label for="profilePokemon">宝可梦</label>
+        <select id="profilePokemon"></select>
+        <small>新方案先继承通用基准，只覆盖你改过的卡牌。</small>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel" formnovalidate>取消</button>
+        <button class="btn btn-primary" value="ok">创建</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const BASE = '__baseline__';
+    const PRESETS = [10, 8, 5, 0, -5];
+    const CATEGORIES = [
+      ['all', '全部'], ['祝福', '祝福'], ['招式', '招式'], ['道具', '道具'],
+      ['维生素', '维生素'], ['其他', '化石/其他'], ['configured', '已设权重'],
+    ];
+    const ADDABLE = ['招式', '道具', '维生素', '祝福', '其他'];
+    const ITEM_RARITIES = ['传说', '史诗', '稀有', '少见', '普通'];
+    const RARITY_COLOR = {
+      '传说': '--r-legend', '史诗': '--r-epic', '稀有': '--r-rare', '少见': '--r-uncommon', '普通': '--r-common',
+      '招式': '--r-move', '维生素': '--r-vitamin', '祝福': '--r-blessing', '其他': '--r-other',
+    };
+
+    const state = {
+      cards: [],
+      pokemon151: [],
+      baseline: {},
+      profiles: {},
+      active: null,
+      selected: BASE,
+      rarityOrder: [],
+      category: 'all',
+      itemRarity: 'all',
+      ownMovesOnly: true,
+      dirty: false,
+    };
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    // ---------- Weights ----------
+    const isOverride = name => state.selected !== BASE && name in (state.profiles[state.selected] || {});
+    const baseWeight = name => state.baseline[name] ?? 0;
+    const weightOf = name => isOverride(name) ? state.profiles[state.selected][name] : baseWeight(name);
+    const tierClass = w => w >= 8 ? 'w-high' : w > 0 ? 'w-pos' : w < 0 ? 'w-neg' : 'w-zero';
+
+    function setWeight(name, value) {
+      let w = Number(value);
+      if (!Number.isFinite(w)) w = 0;
+      if (state.selected !== BASE) {
+        // In a profile any value overrides the shared one, 0 included ("ignore it for this Pokémon").
+        (state.profiles[state.selected] ||= {})[name] = w;
+      } else if (w === 0) {
+        delete state.baseline[name];
+      } else {
+        state.baseline[name] = w;
+      }
+      afterEdit(name);
+    }
+
+    function resetOverride(name) {
+      const prof = state.profiles[state.selected];
+      if (!prof || !(name in prof)) return;
+      delete prof[name];
+      afterEdit(name);
+    }
+
+    function afterEdit(name) {
+      markDirty();
+      refreshRow(name);
+      renderSummary();
+      renderProfiles();
+      renderCategories();
+    }
+
+    // ---------- Init ----------
+    async function init() {
+      try {
+        const res = await fetch('/api/data');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        state.cards = data.cards || [];
+        state.pokemon151 = data.pokemon_151 || [];
+        state.baseline = data.baseline_weights || {};
+        state.profiles = data.pokemon_profiles || {};
+        state.active = data.active_pokemon || null;
+        state.rarityOrder = data.rarity_order || [];
+        state.selected = state.active && state.profiles[state.active] ? state.active : BASE;
+        $('configPath').textContent = data.config_path || '';
+        $('configPath').title = data.config_path || '';
+      } catch (err) {
+        $('list').innerHTML = `<div class="empty">读取配置失败（${esc(err.message)}）。<br>确认 python -m autobonk.editor 仍在运行，然后刷新页面。</div>`;
+        return;
+      }
+      const opts = state.pokemon151.map(p => `<option value="${esc(p.name)}">${esc(p.num)} ${esc(p.name)}</option>`).join('');
+      $('profilePokemon').innerHTML = opts;
+      $('newPokemon').innerHTML = '<option value="">通用</option>' + opts;
+      renderAll();
+    }
+
+    function renderAll() {
+      renderProfiles();
+      renderRarity();
+      renderCategories();
+      renderList();
+      renderSummary();
+    }
+
+    // ---------- Sidebar ----------
+    function renderProfiles() {
+      const names = [BASE, ...Object.keys(state.profiles).sort((a, b) => a.localeCompare(b, 'zh-CN'))];
+      $('profiles').innerHTML = names.map(p => {
+        const isBase = p === BASE;
+        const count = Object.keys(isBase ? state.baseline : state.profiles[p]).length;
+        return `
+          <div class="profile-line">
+            <button class="profile ${state.selected === p ? 'selected' : ''}" data-profile="${esc(p)}" aria-pressed="${state.selected === p}">
+              <span class="pname">${isBase ? '通用基准' : esc(p)}</span>
+              ${state.active === p ? '<span class="tag-active">出战</span>' : ''}
+              <span class="pcount" title="${isBase ? '已设权重' : '专属覆盖'}">${count}</span>
+            </button>
+            ${isBase ? '' : `<button class="link-btn danger" data-delete-profile="${esc(p)}" aria-label="删除 ${esc(p)} 方案" title="删除方案">✕</button>`}
+          </div>`;
+      }).join('');
+
+      const btn = $('setActiveBtn');
+      if (state.selected === BASE) {
+        btn.hidden = !state.active;
+        btn.textContent = '出战只用通用基准';
+      } else {
+        btn.hidden = state.active === state.selected;
+        btn.textContent = `设「${state.selected}」为出战`;
+      }
+      $('summaryTitle').textContent = state.selected === BASE ? '通用基准' : `${state.selected} 方案`;
+    }
+
+    function renderRarity() {
+      const n = state.rarityOrder.length;
+      $('rarityList').innerHTML = state.rarityOrder.map((r, i) => `
+        <li style="--rc: var(${RARITY_COLOR[r] || '--muted'})">
+          <span class="rank">${i + 1}</span>
+          <span class="rname">${esc(r)}</span>
+          <button data-rarity-move="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="${esc(r)} 上移">↑</button>
+          <button data-rarity-move="${i}" data-dir="1" ${i === n - 1 ? 'disabled' : ''} aria-label="${esc(r)} 下移">↓</button>
+        </li>`).join('');
+    }
+
+    function renderSummary() {
+      let set = 0, high = 0, avoid = 0;
+      for (const name of new Set(state.cards.map(c => c.name))) {  // 星星碎片 is both a vitamin and an item
+        const w = weightOf(name);
+        if (w !== 0) set++;
+        if (w >= 8) high++;
+        if (w < 0) avoid++;
+      }
+      $('sumSet').textContent = set;
+      $('sumHigh').textContent = high;
+      $('sumAvoid').textContent = avoid;
+      $('sumOverride').textContent = state.selected === BASE ? '—' : Object.keys(state.profiles[state.selected] || {}).length;
+    }
+
+    // ---------- Filters ----------
+    // In a Pokémon's view, other Pokémon's moves are hidden unless toggled.
+    function inScope(c) {
+      return !(c.category === '招式' && state.selected !== BASE && state.ownMovesOnly && c.pokemon && c.pokemon !== state.selected);
+    }
+
+    function inCategory(c, cat) {
+      if (cat === 'all') return true;
+      if (cat === 'configured') return weightOf(c.name) !== 0;
+      return c.category === cat;
+    }
+
+    function renderCategories() {
+      $('categories').innerHTML = CATEGORIES.map(([key, label]) => {
+        const n = state.cards.filter(c => inScope(c) && inCategory(c, key)).length;
+        const on = state.category === key;
+        return `<button role="tab" aria-selected="${on}" class="${on ? 'on' : ''}" data-cat="${key}">${label}<span class="n">${n}</span></button>`;
+      }).join('');
+
+      const sub = [];
+      if (state.category === '道具') {
+        sub.push('<span>品质</span>');
+        for (const r of ['all', ...ITEM_RARITIES]) {
+          sub.push(`<button class="chip ${state.itemRarity === r ? 'on' : ''}" data-item-rarity="${r}">${r === 'all' ? '全部' : r}</button>`);
+        }
+      }
+      if (state.category === '招式' && state.selected !== BASE) {
+        sub.push(`<button class="chip ${state.ownMovesOnly ? 'on' : ''}" data-own-moves aria-pressed="${state.ownMovesOnly}">只看 ${esc(state.selected)} 的招式</button>`);
+      }
+      $('subFilters').innerHTML = sub.join('');
+      $('subFilters').hidden = sub.length === 0;
+
+      $('notice').innerHTML = state.category !== '祝福' ? '' : `
+        <div class="notice">
+          <b>+属性</b> 匹配该属性的所有祝福，不论数值：设「+伤害」为 8，+14% 伤害和 +38% 伤害都按 8 计。
+          同分时按稀有度选，稀有度越高数值通常越大。
+        </div>`;
+    }
+
+    function visibleCards() {
+      const q = $('search').value.trim().toLowerCase();
+      return state.cards.filter(c => {
+        if (!inScope(c) || !inCategory(c, state.category)) return false;
+        if (state.category === '道具' && state.itemRarity !== 'all' && c.rarity !== state.itemRarity) return false;
+        if (q && ![c.name, c.desc, c.stat, c.pokemon, c.damage_type, c.shape].some(s => (s || '').toLowerCase().includes(q))) return false;
+        return true;
+      });
+    }
+
+    // ---------- List ----------
+    function renderList() {
+      const cards = visibleCards();
+      const list = $('list');
+      if (!cards.length) {
+        const q = $('search').value.trim();
+        list.innerHTML = `<div class="empty">${q ? `没有卡牌匹配「${esc(q)}」。` : '这个分类下还没有卡牌。'}
+          <br><button class="btn" data-add-card>添加卡牌${q ? `「${esc(q)}」` : ''}</button></div>`;
+        return;
+      }
+      const byName = (a, b) => a.name.localeCompare(b.name, 'zh-CN');
+      const rRank = r => { const i = state.rarityOrder.indexOf(r); return i < 0 ? 99 : i; };
+      const sort = $('sort').value;
+
+      if (sort === 'weight') {
+        const groups = new Map();
+        for (const c of cards) {
+          const w = weightOf(c.name);
+          if (!groups.has(w)) groups.set(w, []);
+          groups.get(w).push(c);
+        }
+        const order = [...groups.keys()].sort((a, b) => (a === 0) - (b === 0) || b - a);  // unset last
+        list.innerHTML = order.map(w => {
+          const group = groups.get(w).sort((a, b) => rRank(a.rarity) - rRank(b.rarity) || byName(a, b));
+          return `
+            <section class="tier ${tierClass(w).slice(2)}">
+              <div class="tier-label"><b>${w === 0 ? '未设' : w}</b><span>${group.length} 张</span></div>
+              <div class="rows">${group.map(rowHtml).join('')}</div>
+            </section>`;
+        }).join('');
+      } else {
+        cards.sort(sort === 'rarity'
+          ? (a, b) => rRank(a.rarity) - rRank(b.rarity) || weightOf(b.name) - weightOf(a.name) || byName(a, b)
+          : byName);
+        list.innerHTML = `<div class="rows">${cards.map(rowHtml).join('')}</div>`;
+      }
+    }
+
+    // Moves: physical/special, projectile shape, then catalog tags (专属, 初始, Lv.N).
+    function moveBadges(c) {
+      if (c.category !== '招式') return '';
+      const dmg = c.damage_type === '物理' ? '<span class="badge dmg phys">⚔️ 物理</span>'
+        : c.damage_type === '特殊' ? '<span class="badge dmg spec">✨ 特殊</span>' : '';
+      const shape = c.shape ? `<span class="badge plain">${esc(c.shape)}</span>` : '';
+      const tags = (c.tags || []).filter(t => t !== c.shape).map(t => `<span class="badge ${t === '专属' ? 'tag-own' : 'plain'}">${esc(t)}</span>`).join('');
+      return dmg + shape + tags;
+    }
+
+    function rowHtml(c) {
+      const w = weightOf(c.name);
+      const rarity = c.rarity || c.category;
+      const color = RARITY_COLOR[rarity] || '--muted';
+      const i = state.cards.indexOf(c);
+      let origin = '';
+      if (state.selected !== BASE) {
+        origin = isOverride(c.name)
+          ? `<span class="badge override">专属</span><button class="link-btn" data-reset>↺ 改回通用值 ${baseWeight(c.name)}</button>`
+          : '<span class="inherit">继承通用</span>';
+      }
+      return `
+        <article class="row ${tierClass(w)}" data-i="${i}" style="--rc: var(${color})">
+          <span class="edge"></span>
+          <div class="row-main">
+            <div class="row-title">
+              <span class="name">${esc(c.name)}</span>
+              <span class="badge">${esc(rarity)}</span>
+              ${moveBadges(c)}
+              ${c.pokemon ? `<span class="badge plain">${esc(c.pokemon)}</span>` : ''}
+              ${origin}
+            </div>
+            <div class="desc" title="${esc(c.desc || c.stat)}">${esc(c.desc || c.stat || '')}</div>
+            ${c.stats ? `<div class="stats">${Object.entries(c.stats).map(([k, v]) => `<span>${esc(k)}<b>${esc(v)}</b></span>`).join('')}</div>` : ''}
+          </div>
+          <div class="controls ${tierClass(w)}">
+            <div class="presets" role="group" aria-label="快速设定">
+              ${PRESETS.map(p => `<button class="${p === w ? 'cur' : ''}" data-set="${p}" style="--wc: var(--${tierClass(p)})">${p > 0 ? '+' + p : p}</button>`).join('')}
+            </div>
+            <div class="stepper">
+              <button data-step="-1" aria-label="${esc(c.name)} 权重减 1">−</button>
+              <input type="number" step="1" value="${w}" aria-label="${esc(c.name)} 权重">
+              <button data-step="1" aria-label="${esc(c.name)} 权重加 1">+</button>
+            </div>
+          </div>
+        </article>`;
+    }
+
+    // Redraw one row in place, so a card doesn't jump tiers while it's being edited.
+    function refreshRow(name) {
+      state.cards.forEach((c, i) => {
+        if (c.name !== name) return;
+        const old = document.querySelector(`.row[data-i="${i}"]`);
+        if (!old) return;
+        const a = document.activeElement;
+        const focusKey = old.contains(a) ? (a.dataset.step ? `[data-step="${a.dataset.step}"]` : a.dataset.set ? `[data-set="${a.dataset.set}"]` : a.matches('input') ? 'input' : null) : null;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = rowHtml(c).trim();
+        const row = tpl.content.firstElementChild;
+        old.replaceWith(row);
+        if (focusKey) row.querySelector(focusKey)?.focus();
+      });
+    }
+
+    // ---------- Dirty / save ----------
+    function markDirty() {
+      state.dirty = true;
+      $('syncState').textContent = '有未保存的修改';
+      $('syncState').classList.add('dirty');
+      $('saveBtn').classList.add('dirty');
+    }
+
+    function markSaved() {
+      state.dirty = false;
+      $('syncState').textContent = '已保存';
+      $('syncState').classList.remove('dirty');
+      $('saveBtn').classList.remove('dirty');
+    }
+
+    async function save() {
+      const btn = $('saveBtn');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            baseline_weights: state.baseline,
+            active_pokemon: state.active,
+            pokemon_profiles: state.profiles,
+            rarity_order: state.rarityOrder,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.status !== 'ok') throw new Error(data.error || `HTTP ${res.status}`);
+        markSaved();
+        toast('已保存到 autobonk.toml，重启机器人后生效。');
+      } catch (err) {
+        toast(`保存失败：${err.message}。修改仍在页面上，可以再试一次。`, true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    let toastTimer;
+    function toast(msg, isError = false) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.classList.toggle('error', isError);
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), isError ? 6000 : 2500);
+    }
+
+    // ---------- Events ----------
+    const cardOf = el => state.cards[+el.closest('.row').dataset.i];
+
+    $('list').addEventListener('click', e => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      if (t.hasAttribute('data-add-card')) return openAddCard($('search').value.trim());
+      const card = cardOf(t);
+      if (t.dataset.set !== undefined) setWeight(card.name, +t.dataset.set);
+      else if (t.dataset.step) setWeight(card.name, weightOf(card.name) + +t.dataset.step);
+      else if (t.hasAttribute('data-reset')) resetOverride(card.name);
+    });
+    $('list').addEventListener('change', e => {
+      if (e.target.matches('.stepper input')) setWeight(cardOf(e.target).name, e.target.value);
+    });
+
+    $('profiles').addEventListener('click', e => {
+      const del = e.target.closest('[data-delete-profile]');
+      if (del) {
+        const p = del.dataset.deleteProfile;
+        const n = Object.keys(state.profiles[p]).length;
+        if (!confirm(`删除「${p}」方案和它的 ${n} 个专属权重？保存后才会写入文件。`)) return;
+        delete state.profiles[p];
+        if (state.active === p) state.active = null;
+        if (state.selected === p) state.selected = BASE;
+        markDirty();
+        return renderAll();
+      }
+      const btn = e.target.closest('[data-profile]');
+      if (btn) { state.selected = btn.dataset.profile; renderAll(); }
+    });
+
+    $('setActiveBtn').addEventListener('click', () => {
+      state.active = state.selected === BASE ? null : state.selected;
+      markDirty();
+      renderProfiles();
+      toast(state.active ? `出战宝可梦改为「${state.active}」，保存后生效。` : '出战时只用通用基准，保存后生效。');
+    });
+
+    $('rarityList').addEventListener('click', e => {
+      const b = e.target.closest('[data-rarity-move]');
+      if (!b) return;
+      const i = +b.dataset.rarityMove, j = i + +b.dataset.dir;
+      [state.rarityOrder[i], state.rarityOrder[j]] = [state.rarityOrder[j], state.rarityOrder[i]];
+      markDirty();
+      renderRarity();
+      if ($('sort').value !== 'name') renderList();
+      $('rarityList').querySelector(`[data-rarity-move="${j}"][data-dir="${b.dataset.dir}"]:not(:disabled)`)?.focus();
+    });
+
+    $('categories').addEventListener('click', e => {
+      const b = e.target.closest('[data-cat]');
+      if (!b) return;
+      state.category = b.dataset.cat;
+      renderCategories();
+      renderList();
+    });
+    $('subFilters').addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.itemRarity) state.itemRarity = b.dataset.itemRarity;
+      if (b.hasAttribute('data-own-moves')) state.ownMovesOnly = !state.ownMovesOnly;
+      renderCategories();
+      renderList();
+    });
+
+    let searchTimer;
+    $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderList, 80); });
+    $('sort').addEventListener('change', renderList);
+    $('saveBtn').addEventListener('click', save);
+
+    function openAddCard(name = '') {
+      $('newName').value = name;
+      $('newCategory').value = ADDABLE.includes(state.category) ? state.category : (name.startsWith('+') ? '祝福' : '招式');
+      $('newPokemon').value = state.selected === BASE ? '' : state.selected;
+      $('newDesc').value = '';
+      $('newWeight').value = 5;
+      $('addCardDialog').returnValue = '';
+      $('addCardDialog').showModal();
+      $('newName').focus();
+    }
+    $('addCardBtn').addEventListener('click', () => openAddCard());
+    $('addCardDialog').addEventListener('close', () => {
+      if ($('addCardDialog').returnValue !== 'ok') return;
+      const name = $('newName').value.trim();
+      if (!name) return;
+      const cat = $('newCategory').value;
+      if (!state.cards.some(c => c.name === name)) {
+        state.cards.unshift({
+          name, category: cat, rarity: cat, stat: '', desc: $('newDesc').value.trim(),
+          pokemon: cat === '招式' ? ($('newPokemon').value || null) : null,
+        });
+      }
+      const w = Number($('newWeight').value) || 0;
+      setWeight(name, w);
+      renderList();
+      toast(`已添加「${name}」，权重 ${w}。`);
+    });
+
+    $('newProfileBtn').addEventListener('click', () => {
+      const firstFree = state.pokemon151.find(p => !state.profiles[p.name]);
+      if (firstFree) $('profilePokemon').value = firstFree.name;
+      $('profileDialog').returnValue = '';
+      $('profileDialog').showModal();
+    });
+    $('profileDialog').addEventListener('close', () => {
+      if ($('profileDialog').returnValue !== 'ok') return;
+      const name = $('profilePokemon').value;
+      if (!name) return;
+      if (!state.profiles[name]) { state.profiles[name] = {}; markDirty(); }
+      state.selected = name;
+      renderAll();
+      toast(`已创建「${name}」方案。`);
+    });
+
+    window.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+      else if (e.key === '/' && !e.target.closest('input, select, textarea, dialog')) { e.preventDefault(); $('search').focus(); }
+      else if (e.key === 'Escape' && e.target === $('search')) { $('search').value = ''; renderList(); }
+    });
+    window.addEventListener('beforeunload', e => { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+    init();
+  </script>
+</body>
+</html>

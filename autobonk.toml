@@ -30,77 +30,126 @@ choices_file = "logs/choices.jsonl"
 
 [cards]
 # How choice popups are answered: level-up, item choice, fossil ruins/blessing, Porygon, Snorlax, Ditto.
-# Card names exactly as the game shows them (copy them from the log). Positive weight = prefer,
-# negative = avoid, unlisted = 0. The highest weight wins; equal weights fall back to rarity, then
-# the leftmost card. So any positive weight beats any unlisted card, whatever its rarity.
-# Refresh (F), Skip (X) and Banish (Z) are never used.
+# Card names exactly as the game shows them. Positive weight = prefer, negative = avoid, unlisted = 0.
+# The highest weight wins; equal weights fall back to rarity_order, then leftmost card.
+# Stat blessings: "+伤害" weighs every "+N% 伤害" roll, whatever the number.
+rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 
-# Best first. Anything not listed ranks below all of these. New-move cards show 招式 here;
-# add it (e.g. first) if you want new moves preferred.
-rarity_order = ["招式", "传说", "史诗", "稀有", "少见", "普通"]
-
-# Tuned from the player's run recording (logs/choices.jsonl) with Mewtwo (超梦).
-# Special Psychic build focusing on high-scaling special moves, spell vamp/luck/haste vitamins, and relics.
 [cards.weights]
-# 10 = Top priority: build-defining relics, fossils, and fusion signatures
-"月之石" = 10
+# Baseline weights shared across all Pokémon (items, vitamins, general stats)
+# Priority 10
+"宝可梦之笛" = 10
+"心之水滴" = 10
+"招式学习器盒" = 10
 "甲壳化石" = 10
 
-# 9 = Core special moves and essential vitamins (equal weight; rarity breaks ties)
-"精神击破" = 9
-"棱镜镭射" = 9
-"精神突进" = 9
-"幻象光线" = 9
-"广域战力" = 9
-"基因霸权" = 9
+# Priority 9
+"+幸运" = 9
 "全满药" = 9
+"基因霸权" = 9
+"幻象光线" = 9
 "星星碎片" = 9
+"棱镜镭射" = 9
+"精神击破" = 9
+"精神突进" = 9
+"觉醒之石" = 9
+"讲究眼镜" = 9
 "ＰＰ单项小补剂" = 9
 "ＰＰ多项全补剂" = 9
-"讲究眼镜" = 9
+"ＰＰ极限提升剂" = 9
 
-# 8 = Damage blessings and high-tier stat bonuses
-"+38% 伤害" = 8
-"+21% 伤害" = 8
-"+14% 伤害" = 8
+# Priority 8
+"+伤害" = 8
+"+攻击速度" = 8
+"+经验" = 8
+"+速度" = 8
 "伤害" = 8
-"+22 幸运" = 8
-"+22% 经验" = 8
-"+21% 攻击速度" = 8
-"+18% 攻击速度" = 8
-"+14% 速度" = 8
-"+8% 速度" = 8
+"大师球" = 8
+"大葱" = 8
+"日之石" = 8
+"暗之石" = 8
+"月之石" = 8
+"活力块" = 8
+"活力碎片" = 8
+"白玉宝珠" = 8
+"白色玻璃哨" = 8
+"金刚宝珠" = 8
 
-# 7 = High-value chest items and secondary blessings
-"觉醒之石" = 7
+# Priority 7
+"+范围" = 7
+"代币盒" = 7
+"充电电池" = 7
+"博识眼镜" = 7
+"星星沙子" = 7
+"生命宝珠" = 7
 "神奇糖果" = 7
-"金刚宝珠" = 7
-"暗之石" = 7
-"ＰＰ极限提升剂" = 7
-"活力碎片" = 7
-"+47% 经验" = 7
-"+26% 经验" = 7
-"+15 幸运" = 7
-"+17% 范围" = 7
-"+14% 范围" = 7
-"+10% 速度" = 7
+"银色之羽" = 7
 
-# 6 = Useful utility chest items
-"白色玻璃哨" = 6
+# Priority 6
+"先制之爪" = 6
+"学习装置" = 6
+"强制锻炼器" = 6
 "秘密钥匙" = 6
+"讲究围巾" = 6
 
-# 5 = Early game / transitional moves and secondary stats
-"精神利刃" = 5
+# Priority 5
+"吉利拳" = 5
+"幸运蛋" = 5
+"广域战力" = 5
+"强力香草" = 5
+"戏法空间" = 5
+"气球" = 5
 "特攻增强剂" = 5
+"白雾" = 5
+"锐利之爪" = 5
+"预知未来" = 5
 
-# 4 = Late-game difficulty & XP scaling
+# Priority 4
+"广角镜" = 4
 "诅咒薰香" = 4
 
-# Avoid (-5): Traps, unwanted physical/defensive moves, and rejected altar trade-offs
-"星星沙子" = -5
+# Priority 3
+"速度粉" = 3
+
+# Avoid (-1)
+"破旧钓竿" = -1
+
+# Avoid (-5)
+"+再生" = -5
+"+宝可币" = -5
+"+异常状态几率" = -5
+"+护甲" = -5
+"+持续时间" = -5
+"+暴击率" = -5
+"+最大 HP" = -5
+"MissingNo." = -5
+"屏障" = -5
+"投球" = -5
+"波导弹" = -5
+"爱心印章" = -5
+"秘密琥珀" = -5
+"精神利刃" = -5
 "精神扭曲" = -5
 "贝壳化石" = -5
-"秘密琥珀" = -5
 "附着针" = -5
-"屏障" = -5
-"波导弹" = -5
+
+[cards.pokemon."超梦"]
+# Specific skill priorities and overrides for 超梦
+# Priority 5
+"弯曲的汤匙" = 5
+
+# Neutral (0): ignore the shared weight
+"破旧钓竿" = 0
+
+# Avoid (-1)
+"丝绸围巾" = -1
+"力量头带" = -1
+"奇迹种子" = -1
+"妖精之羽" = -1
+"木炭" = -1
+"柔软沙子" = -1
+"硬石头" = -1
+"神秘水滴" = -1
+"银粉" = -1
+"锐利鸟嘴" = -1
+"龙之牙" = -1

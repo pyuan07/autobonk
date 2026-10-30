@@ -20,6 +20,7 @@ class Config:
     unknown_screen_pause_s: float
     cards: CardPrefs
     choices_file: Path
+    active_pokemon: str | None = None
 
 
 def load_config(path: Path) -> Config:
@@ -37,6 +38,16 @@ def load_config(path: Path) -> Config:
     frame_hotkey = hotkeys.get("frame", "f9").lower()
     if pause_hotkey == frame_hotkey:
         raise ValueError(f"{path}: pause and frame hotkeys are both {pause_hotkey!r}")
+
+    # Resolve card weights: baseline [cards.weights] merged with [cards.pokemon.<active_pokemon>]
+    weights = dict(cards.get("weights", {}))
+    active_pokemon = cards.get("active_pokemon")
+    pokemon_table = cards.get("pokemon", {})
+    if active_pokemon and isinstance(pokemon_table, dict) and active_pokemon in pokemon_table:
+        specific = pokemon_table[active_pokemon]
+        if isinstance(specific, dict):
+            weights.update(specific)
+
     return Config(
         url=browser.get("url", "https://pokebonk.com/"),
         profile_dir=base / browser.get("profile_dir", "profile"),
@@ -48,8 +59,9 @@ def load_config(path: Path) -> Config:
         steps_per_second=bot.get("steps_per_second", 10),
         unknown_screen_pause_s=bot.get("unknown_screen_pause_s", 5),
         cards=CardPrefs(
-            weights=dict(cards.get("weights", {})),
+            weights=weights,
             rarity_order=tuple(cards.get("rarity_order", DEFAULT_RARITY_ORDER)),
         ),
         choices_file=base / data.get("record", {}).get("choices_file", "logs/choices.jsonl"),
+        active_pokemon=active_pokemon,
     )
