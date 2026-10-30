@@ -29,6 +29,7 @@ unknown_screen_pause_s = 5
 choices_file = "logs/choices.jsonl"
 
 [cards]
+active_pokemon = "超梦"
 # How choice popups are answered: level-up, item choice, fossil ruins/blessing, Porygon, Snorlax, Ditto.
 # Card names exactly as the game shows them. Positive weight = prefer, negative = avoid, unlisted = 0.
 # The highest weight wins; equal weights fall back to rarity_order, then leftmost card.
@@ -46,12 +47,7 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 # Priority 9
 "+幸运" = 9
 "全满药" = 9
-"基因霸权" = 9
-"幻象光线" = 9
 "星星碎片" = 9
-"棱镜镭射" = 9
-"精神击破" = 9
-"精神突进" = 9
 "觉醒之石" = 9
 "讲究眼镜" = 9
 "ＰＰ单项小补剂" = 9
@@ -95,14 +91,10 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 # Priority 5
 "吉利拳" = 5
 "幸运蛋" = 5
-"广域战力" = 5
 "强力香草" = 5
-"戏法空间" = 5
 "气球" = 5
 "特攻增强剂" = 5
-"白雾" = 5
 "锐利之爪" = 5
-"预知未来" = 5
 
 # Priority 4
 "广角镜" = 4
@@ -122,21 +114,25 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "+持续时间" = -5
 "+暴击率" = -5
 "+最大 HP" = -5
-"MissingNo." = -5
-"屏障" = -5
-"投球" = -5
-"波导弹" = -5
-"爱心印章" = -5
 "秘密琥珀" = -5
-"精神利刃" = -5
-"精神扭曲" = -5
 "贝壳化石" = -5
 "附着针" = -5
 
 [cards.pokemon."超梦"]
 # Specific skill priorities and overrides for 超梦
+# Priority 9
+"基因霸权" = 9
+"幻象光线" = 9
+"棱镜镭射" = 9
+"精神击破" = 9
+"精神突进" = 9
+
 # Priority 5
+"广域战力" = 5
 "弯曲的汤匙" = 5
+"戏法空间" = 5
+"白雾" = 5
+"预知未来" = 5
 
 # Neutral (0): ignore the shared weight
 "破旧钓竿" = 0
@@ -153,3 +149,12 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "银粉" = -1
 "锐利鸟嘴" = -1
 "龙之牙" = -1
+
+# Avoid (-5)
+"MissingNo." = -5
+"屏障" = -5
+"投球" = -5
+"波导弹" = -5
+"爱心印章" = -5
+"精神利刃" = -5
+"精神扭曲" = -5

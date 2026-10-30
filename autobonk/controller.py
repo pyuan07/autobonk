@@ -98,6 +98,7 @@ class Controller:
         elif isinstance(command, Stop):
             self._halt(f"STOPPED ({command.reason})")
         elif isinstance(command, Pause):
+            self._save_frame()  # keep the screen the bot couldn't handle, to teach it later
             self._halt(f"PAUSED ({command.reason})")
 
     def _halt(self, message: str) -> None:

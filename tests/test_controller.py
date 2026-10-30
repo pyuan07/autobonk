@@ -2,7 +2,7 @@ import logging
 import threading
 from pathlib import Path
 
-from autobonk.bot import Bot
+from autobonk.bot import Bot, Pause
 from autobonk.controller import Controller
 from autobonk.frames import Frame, FrameRecorder, load_frame
 
@@ -202,3 +202,18 @@ def test_failed_watch_is_logged_not_raised(tmp_path, caplog):
     controller.tick()
 
     assert "page gone" in caplog.text
+
+
+def test_a_bot_pause_saves_the_frame_it_could_not_handle(tmp_path):
+    class PausingBot:
+        def step(self, frame):
+            return [Pause("unknown popup: 新区域")]
+
+    controller, _, frame = make_controller(tmp_path, bot=PausingBot())
+    controller.paused = False
+
+    controller.tick()
+
+    assert controller.paused
+    [json_file] = tmp_path.glob("*.json")
+    assert load_frame(json_file.with_suffix("")) == frame
