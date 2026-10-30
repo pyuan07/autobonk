@@ -12,7 +12,7 @@ from autobonk.perception import LEAVE_BUTTONS, Observation, Popup, perceive
 from autobonk.zonemap import Position
 
 log = logging.getLogger(__name__)
-T = TypeVar("T")
+T = TypeVar("T", bound=tuple[float, float])
 
 # If a popup is still open this long after answering it, the key was missed: press again.
 POPUP_RETRY_S = 1.0
@@ -30,11 +30,21 @@ DIRECTION_KEYS = (
 )
 # Closer than this (minimap pixels) the player is at the target (in an altar's ring): stop walking.
 ALTAR_ARRIVED_PX = 14
+TARGET_ARRIVED_PX = 4  # walk right onto non-altar targets unless the HUD prompt is already open
+TEMP_TARGET_PX = 24  # remember a close target's (x, y) so the player arrow can't hide its icon
+APPROACH_PX_PER_S = 20.0  # how fast a remembered target's offset shrinks while walking toward it
+INTERACT_PX = 20  # start spamming E once this close to a non-altar target
+CLOSE_TIMEOUT_PX = 45  # once within this range, give up on the target if not taken in INTERACT_WAIT_S
 ALTAR = "符文祭坛"  # rune altars' name in [targets.weights]; every other name is an icon in autobonk.icons
 DEFAULT_TARGETS = {ALTAR: 10.0}
 BOSS = "骷髅"  # the area boss: E summons it (BossRule says when), then it chases the player
+PORTAL = "传送门"
+SUPER_BALL = "超级球"
+GIFT_BALL = "礼物球"
+SUPER_BALLS = frozenset({SUPER_BALL, GIFT_BALL})
 INTERACT_KEY = "KeyE"  # at a target other than an altar (shop, chest...); without the money nothing happens
-INTERACT_WAIT_S = 1.5  # after E, a target still there with no popup or charging was not taken
+INTERACT_WAIT_S = 5.0  # after trying for 5 s with no popup or charging, skip the target
+INTERACT_RETRY_S = 0.3  # spam E at this interval while close to the target
 MAP_KEY = "Tab"  # held while exploring: the zone map shows, the game keeps running
 GRID = 8  # the zone is explored as GRID x GRID cells; edge cells are never targets
 ALTAR_PROGRESS_PX = 3  # getting this much closer to the target (minimap pixels) counts as progress
@@ -104,6 +114,7 @@ class Movement:
     target_ignore_s: float = 60.0  # a target left (charge cap, E did nothing) is skipped this long
     stuck_s: float = 2.5  # no progress toward the target this long: sidestep
     sidestep_s: float = 0.6
+    distance_factor: float = 0.2  # closer targets get up to +(distance_factor * 100)% score bonus
     rng: Uniform = field(default_factory=random.Random)
 
 
@@ -116,8 +127,9 @@ class Bot:
         targets: Mapping[str, Weight] | None = None,
         boss: BossRule | None = None,
     ):
-        """`targets`: map icon name -> weight. The highest weight is walked to first, then the
-        nearest; 0 or less is never visited. `boss`: when to summon the area boss (骷髅); None never."""
+        """`targets`: map icon name -> weight. Targets are scored by weight with a proximity bonus
+        (up to movement.distance_factor, default +20%); 0 or less is never visited. `boss`: when to
+        summon the area boss (骷髅); None never."""
         self._unknown_screen_pause_s = unknown_screen_pause_s
         self._cards = cards
         self._movement = movement or Movement()
@@ -125,7 +137,16 @@ class Bot:
         self._weights = {name: w if isinstance(w, tuple) else (w, w) for name, w in weights.items()}
         self._weights = {name: w for name, w in self._weights.items() if max(w) > 0 and name != BOSS}
         self._boss = boss
-        self._icons = tuple(name for name in self._weights if name != ALTAR) + ((BOSS,) if boss else ())
+        if SUPER_BALL in self._weights and GIFT_BALL not in self._weights:
+            self._weights[GIFT_BALL] = self._weights[SUPER_BALL]
+        elif GIFT_BALL in self._weights and SUPER_BALL not in self._weights:
+            self._weights[SUPER_BALL] = self._weights[GIFT_BALL]
+        icon_names = set(name for name in self._weights if name != ALTAR)
+        if boss:
+            icon_names.add(BOSS)
+        icon_names.add(SUPER_BALL)
+        icon_names.add(GIFT_BALL)
+        self._icons = tuple(icon_names)
         self._now_weights: dict[str, float] = {}  # this step's weights
         self._zone_seconds: int | None = None  # the zone's countdown when first seen: its whole time
         self._boss_fight = False  # summoned and chasing: keep moving, no altars
@@ -135,7 +156,8 @@ class Bot:
         self._charging_since: float | None = None
         self._ignored: dict[str, float] = {}  # target name -> skipped until (sealed, charge cap, E did nothing)
         self._target: str | None = None  # the kind of target being walked to or stood at
-        self._interacted: tuple[str, float] | None = None  # (target, when E was pressed)
+        self._interacted: tuple[str, float, float] | None = None  # (target, started_at, last_pressed_at)
+        self._temp_target: tuple[str, tuple[float, float], float] | None = None  # (target, (x, y), when)
         self._zone: str | None = None
         self._visited: set[tuple[int, int]] = set()  # zone-map cells the player has been in
         self._heading: float | None = None  # exploring toward this compass bearing (north-up)
@@ -163,11 +185,15 @@ class Bot:
             self._unrecognised_since = None
             self._next_jump = None
             self._interacted = None
+            self._temp_target = None
             return self._release(self._answer(observation.popup, frame.timestamp))
 
         if observation.countdown:
             self._unrecognised_since = None
-            return self._move(observation, frame.timestamp) + self._jump(frame.timestamp)
+            move_cmds = self._move(observation, frame.timestamp)
+            if Press(INTERACT_KEY) in move_cmds or (self._interacted is not None and not self._held):
+                return move_cmds
+            return move_cmds + self._jump(frame.timestamp)
 
         if observation.recognised:
             self._unrecognised_since = None
@@ -189,46 +215,169 @@ class Bot:
         """Walk to the best target on the minimap (highest weight, then nearest), else explore.
         At an altar stand in the ring while it charges (up to the cap); at anything else press E.
         Sealed altars, ones still charging at the cap and targets E did nothing for are skipped a while."""
-        self._now_weights = self._weigh(observation)
+        self._now_weights = self._weigh(observation, now)
         if observation.sealed_s is not None and not self._skipped(ALTAR, now):
             log.info("altar sealed for %d s: exploring meanwhile", observation.sealed_s)
             self._ignored[ALTAR] = now + observation.sealed_s
         target = self._target or ALTAR
-        if observation.charging:
+        if observation.charging and (self._target is None or self._target == ALTAR):
             self._interacted = None
+            self._temp_target = None
             if self._charging_since is None:
                 self._charging_since = now
             if now - self._charging_since > self._movement.altar_charge_cap_s and not self._skipped(target, now):
                 log.info("%s still charging after %g s: moving on", target, self._movement.altar_charge_cap_s)
-                self._ignored[target] = now + self._movement.target_ignore_s
+                self._ignore_target(target, now + self._movement.target_ignore_s)
         else:
             self._charging_since = None
+
+        prompt_text = ""
+        boss_not_ready = False
+        portal_held = False
+        prompt_ok = False
+        if observation.prompt and (not observation.charging or (self._target is not None and self._target != ALTAR)):
+            _, prompt_text = observation.prompt
+            boss_not_ready = any(k in prompt_text for k in ("守护者", "头目", BOSS)) and (
+                not self._boss or self._boss_beaten or not (
+                    observation.zone_index and self._boss.ready(observation.zone_index, observation.level, observation.seconds_left)
+                )
+            )
+            portal_held = ("传送门" in prompt_text or "离开圣地" in prompt_text) and self._has_nearby_super_balls(observation, now)
+            prompt_ok = not boss_not_ready and not portal_held and not self._skipped(prompt_text, now)
 
         keys: frozenset[str] = frozenset()
         commands: list[Command] = []
         distance: float | None = None
-        candidates = self._candidates([(ALTAR, p) for p in observation.altars] + list(observation.targets), now)
-        if observation.charging and not self._skipped(target, now):
-            pass
-        elif candidates:
-            self._target, (x, y) = self._best(candidates, (0, 0))
-            distance = math.hypot(x, y)
-            if distance > ALTAR_ARRIVED_PX:
-                self._bearing = math.degrees(math.atan2(x, -y))
-                keys = _direction(self._bearing)
-            elif self._target != ALTAR:
-                commands = self._interact(self._target, now)
+        extra_targets: list[tuple[str, tuple[int, int]]] = []
+        if self._boss_beaten and observation.portal is not None and not self._has_nearby_super_balls(observation, now):
+            extra_targets.append((PORTAL, observation.portal))
+
+        if observation.zonemap:
+            zone = observation.zonemap
+            self._visited.add(_cell(zone.player))
+            zone_targets = [(ALTAR, p) for p in zone.altars] + list(zone.targets)
+            candidates = self._candidates(zone_targets, now)
+            target_pos: Position | None = None
+            if self._boss_beaten and observation.portal is not None and not self._has_nearby_super_balls(observation, now):
+                self._target = PORTAL
+            elif candidates:
+                self._target, target_pos = self._best(candidates, zone.player, scale=1.0)
+            else:
+                self._target, target_pos = None, self._nearest_unvisited(zone.player)
+
+            if target_pos is not None:
+                dx, dy = target_pos[0] - zone.player[0], target_pos[1] - zone.player[1]
+                self._heading = math.degrees(math.atan2(dx, -dy))
+
+            matching_minimap: list[Point] = []
+            if self._target == ALTAR:
+                matching_minimap = list(observation.altars)
+            elif self._target == PORTAL and observation.portal is not None:
+                matching_minimap = [observation.portal]
+            elif self._target:
+                matching_minimap = [p for name, p in observation.targets if name == self._target]
+
+            zone_dist = math.hypot(dx, dy) if target_pos is not None else 0.0
+            if observation.charging and (self._target is None or self._target == ALTAR) and not self._skipped(ALTAR, now):
+                pass
+            elif matching_minimap and (target_pos is None or zone_dist < 0.25):
+                mx, my = min(matching_minimap, key=lambda p: p[0] ** 2 + p[1] ** 2)
+                distance = math.hypot(mx, my)
+                if self._target == ALTAR:
+                    if distance > ALTAR_ARRIVED_PX:
+                        self._bearing = math.degrees(math.atan2(mx, -my))
+                        keys = _direction(self._bearing)
+                else:
+                    if distance > TARGET_ARRIVED_PX and not prompt_ok:
+                        self._bearing = math.degrees(math.atan2(mx, -my))
+                        keys = _direction(self._bearing)
+                    if distance <= CLOSE_TIMEOUT_PX or prompt_ok or (self._interacted is not None and self._interacted[0] == self._target):
+                        can_press_e = (distance <= INTERACT_PX or prompt_ok) and not boss_not_ready and not portal_held
+                        commands = self._interact(self._target, now, spam_e=can_press_e, prompt_text=prompt_text)
+            elif prompt_ok:
+                commands = self._interact(prompt_text, now, spam_e=True)
+            else:
+                if self._heading is not None and observation.north is not None:
+                    self._bearing = observation.north + self._heading
+                    keys = _direction(self._bearing) | {MAP_KEY}
+                else:
+                    keys = frozenset({MAP_KEY})
         else:
-            keys = self._explore(observation, now)
+            visible_candidates = self._candidates(
+                [(ALTAR, p) for p in observation.altars] + list(observation.targets) + extra_targets,
+                now,
+            )
+            candidates = self._with_temp_target(visible_candidates, now)
+            boss_wanted = BOSS in self._now_weights and not any(name == BOSS for name, _ in candidates)
+            if observation.charging and (self._target is None or self._target == ALTAR) and not self._skipped(ALTAR, now):
+                pass
+            elif candidates and not boss_wanted:
+                self._target, (x, y) = self._best(candidates, (0, 0), scale=200.0)
+                distance = math.hypot(x, y)
+                if self._target != ALTAR and distance <= TEMP_TARGET_PX:
+                    if any(n == self._target and math.hypot(px, py) <= TEMP_TARGET_PX for n, (px, py) in visible_candidates):
+                        self._temp_target = (self._target, (float(x), float(y)), now)
+                    elif self._temp_target is None or self._temp_target[0] != self._target:
+                        self._temp_target = (self._target, (float(x), float(y)), now)
+                elif self._target == ALTAR or distance > TEMP_TARGET_PX:
+                    self._temp_target = None
+
+                if self._target == ALTAR:
+                    if distance > ALTAR_ARRIVED_PX:
+                        self._bearing = math.degrees(math.atan2(x, -y))
+                        keys = _direction(self._bearing)
+                else:
+                    if distance > TARGET_ARRIVED_PX and not prompt_ok:
+                        self._bearing = math.degrees(math.atan2(x, -y))
+                        keys = _direction(self._bearing)
+                    if distance <= CLOSE_TIMEOUT_PX or prompt_ok or (self._interacted is not None and self._interacted[0] == self._target):
+                        can_press_e = (distance <= INTERACT_PX or prompt_ok) and not boss_not_ready and not portal_held
+                        commands = self._interact(self._target, now, spam_e=can_press_e, prompt_text=prompt_text)
+            elif prompt_ok:
+                commands = self._interact(prompt_text, now, spam_e=True)
+            else:
+                keys = self._explore(observation, now)
         keys = self._unstick(keys, observation, now, distance)
         if keys != self._held:
             self._held = keys
             commands = [Hold(keys)] + commands
         return commands
 
-    def _weigh(self, observation: Observation) -> dict[str, float]:
+    def _with_temp_target(
+        self, candidates: list[tuple[str, tuple[int, int]]], now: float
+    ) -> list[tuple[str, tuple[int, int]]]:
+        """Keep a close target's temporary (x, y) when the player arrow on the minimap covers its icon."""
+        if self._temp_target is None:
+            return candidates
+        t_name, (tx, ty), last_t = self._temp_target
+        if t_name not in self._now_weights or self._skipped(t_name, now):
+            self._temp_target = None
+            return candidates
+        if any(name == t_name and math.hypot(px, py) <= TEMP_TARGET_PX for name, (px, py) in candidates):
+            return candidates
+        dt = max(0.0, now - last_t)
+        dist = math.hypot(tx, ty)
+        if (self._held - {MAP_KEY}) and dist > 0:
+            new_dist = max(0.0, dist - APPROACH_PX_PER_S * dt)
+            scale = new_dist / dist
+            tx, ty = tx * scale, ty * scale
+        self._temp_target = (t_name, (tx, ty), now)
+        return candidates + [(t_name, (int(round(tx)), int(round(ty))))]
+
+    def _has_nearby_super_balls(self, observation: Observation, now: float) -> bool:
+        if self._skipped(SUPER_BALL, now) or self._skipped(GIFT_BALL, now):
+            return False
+        if observation.has_unopened_super_balls:
+            return True
+        return any(
+            name in SUPER_BALLS and not self._skipped(name, now)
+            for name, _ in observation.targets
+        )
+
+    def _weigh(self, observation: Observation, now: float) -> dict[str, float]:
         """This step's target weights: each grows from its start to its end weight as the zone's
-        time runs out. The boss outranks everything once BossRule says so; while it chases, no altars."""
+        time runs out. The boss outranks everything once BossRule says so; while it chases, no altars.
+        After boss fight, nearby super balls are opened first, then the portal is entered."""
         if observation.zone != self._zone:
             self._zone, self._visited, self._heading = observation.zone, set(), None
             self._zone_seconds, self._boss_fight, self._boss_beaten = None, False, False
@@ -237,11 +386,17 @@ class Bot:
             self._zone_seconds = left
         progress = 1 - left / self._zone_seconds if left is not None and self._zone_seconds else 0.0
         weights = {name: start + (end - start) * progress for name, (start, end) in self._weights.items()}
-        if observation.boss_down and not self._boss_beaten:
+        if (observation.boss_down or (self._boss_fight and observation.portal is not None)) and not self._boss_beaten:
             log.info("area boss beaten")
             self._boss_fight, self._boss_beaten = False, True
         if self._boss_fight:
             weights.pop(ALTAR, None)
+        elif self._boss_beaten:
+            if self._has_nearby_super_balls(observation, now):
+                weights[SUPER_BALL] = math.inf
+                weights[GIFT_BALL] = math.inf
+            elif observation.portal is not None:
+                weights[PORTAL] = math.inf
         elif self._boss and not self._boss_beaten and observation.zone_index:
             if self._boss.ready(observation.zone_index, observation.level, left):
                 weights[BOSS] = math.inf
@@ -250,28 +405,74 @@ class Bot:
     def _candidates(self, found: list[tuple[str, T]], now: float) -> list[tuple[str, T]]:
         return [(name, where) for name, where in found if name in self._now_weights and not self._skipped(name, now)]
 
-    def _best(self, candidates: list[tuple[str, T]], origin: tuple[float, float]) -> tuple[str, T]:
+    def _best(
+        self,
+        candidates: list[tuple[str, T]],
+        origin: tuple[float, float],
+        scale: float = 200.0,
+    ) -> tuple[str, T]:
         return max(
             candidates,
-            key=lambda c: (self._now_weights[c[0]], -math.hypot(c[1][0] - origin[0], c[1][1] - origin[1])),
+            key=lambda c: self._candidate_score(c[0], c[1], origin, scale),
         )
+
+    def _candidate_score(
+        self,
+        name: str,
+        pos: tuple[float, float],
+        origin: tuple[float, float],
+        scale: float,
+    ) -> tuple[float, float]:
+        dist = math.hypot(pos[0] - origin[0], pos[1] - origin[1])
+        weight = self._now_weights.get(name, 0.0)
+        if weight <= 0:
+            return (0.0, -dist)
+        if math.isinf(weight):
+            return (math.inf, -dist)
+        norm_dist = min(dist / scale, 1.0) if scale > 0 else 0.0
+        score = weight * (1.0 + self._movement.distance_factor * (1.0 - norm_dist))
+        return (score, -dist)
 
     def _skipped(self, name: str, now: float) -> bool:
         return now < self._ignored.get(name, 0.0)
 
-    def _interact(self, name: str, now: float) -> list[Command]:
-        """Press E once; if the target is still here INTERACT_WAIT_S later, skip its kind a while."""
+    def _ignore_target(self, name: str, until: float) -> None:
+        self._ignored[name] = until
+        if name in SUPER_BALLS:
+            self._ignored[SUPER_BALL] = until
+            self._ignored[GIFT_BALL] = until
+
+    def _interact(self, name: str, now: float, *, spam_e: bool = True, prompt_text: str = "") -> list[Command]:
+        """Spam E while close; if the target is still not taken INTERACT_WAIT_S later, skip its kind a while."""
         if self._interacted is None or self._interacted[0] != name:
+            if not spam_e:
+                self._interacted = (name, now, 0.0)
+                return []
             log.info("at %s: pressing E", name)
-            self._interacted = (name, now)
-            if name == BOSS:
+            self._interacted = (name, now, now)
+            if name == BOSS or "守护者" in name:
                 log.info("area boss summoned: it chases us, so keep moving and leave the altars")
                 self._boss_fight = True
             return [Press(INTERACT_KEY)]
-        if now - self._interacted[1] >= INTERACT_WAIT_S:
-            log.info("%s: E did nothing (not enough money?), skipping for %g s", name, self._movement.target_ignore_s)
-            self._ignored[name] = now + self._movement.target_ignore_s
+        _, started, last_pressed = self._interacted
+        if now - started >= INTERACT_WAIT_S:
+            if name not in (PORTAL, "进入传送门", "离开圣地"):
+                log.info("%s: E did nothing (not enough money?), skipping for %g s", name, self._movement.target_ignore_s)
+                until = now + self._movement.target_ignore_s
+                self._ignore_target(name, until)
+                if prompt_text and prompt_text not in (PORTAL, "进入传送门", "离开圣地"):
+                    self._ignore_target(prompt_text, until)
             self._interacted = None
+            self._temp_target = None
+            return []
+        if spam_e and now - last_pressed >= INTERACT_RETRY_S:
+            if last_pressed == 0.0:
+                log.info("at %s: pressing E", name)
+                if name == BOSS or "守护者" in name:
+                    log.info("area boss summoned: it chases us, so keep moving and leave the altars")
+                    self._boss_fight = True
+            self._interacted = (name, started, now)
+            return [Press(INTERACT_KEY)]
         return []
 
     def _explore(self, observation: Observation, now: float) -> frozenset[str]:
@@ -282,7 +483,7 @@ class Bot:
             self._visited.add(_cell(zone.player))
             candidates = self._candidates([(ALTAR, p) for p in zone.altars] + list(zone.targets), now)
             if candidates:
-                self._target, target = self._best(candidates, zone.player)
+                self._target, target = self._best(candidates, zone.player, scale=1.0)
             else:
                 target = self._nearest_unvisited(zone.player)
             dx, dy = target[0] - zone.player[0], target[1] - zone.player[1]

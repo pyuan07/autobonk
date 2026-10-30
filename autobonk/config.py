@@ -30,6 +30,7 @@ class Config:
     boss: BossRule = BossRule()  # [targets.boss]
     stuck_s: float = 2.5
     sidestep_s: float = 0.6
+    distance_factor: float = 0.2
 
 
 def load_config(path: Path) -> Config:
@@ -57,6 +58,14 @@ def load_config(path: Path) -> Config:
         if isinstance(specific, dict):
             weights.update(specific)
 
+    targets_data = {
+        name: tuple(w) if isinstance(w, list) else w
+        for name, w in data.get("targets", {}).get("weights", {"符文祭坛": 10.0}).items()
+    }
+    if "礼物球" in targets_data and "超级球" not in targets_data:
+        targets_data["超级球"] = targets_data["礼物球"]
+    elif "超级球" in targets_data and "礼物球" not in targets_data:
+        targets_data["礼物球"] = targets_data["超级球"]
     return Config(
         url=browser.get("url", "https://pokebonk.com/"),
         profile_dir=base / browser.get("profile_dir", "profile"),
@@ -76,13 +85,11 @@ def load_config(path: Path) -> Config:
         jump_interval_s=tuple(bot.get("jump_interval_s", (0.8, 1.4))),
         altar_charge_cap_s=bot.get("altar_charge_cap_s", 45),
         target_ignore_s=bot.get("target_ignore_s", 60),
-        targets={
-            name: tuple(w) if isinstance(w, list) else w
-            for name, w in data.get("targets", {}).get("weights", {"符文祭坛": 10.0}).items()
-        },
+        targets=targets_data,
         boss=_boss_rule(data.get("targets", {}).get("boss", {})),
         stuck_s=bot.get("stuck_s", 2.5),
         sidestep_s=bot.get("sidestep_s", 0.6),
+        distance_factor=float(bot.get("distance_factor", data.get("targets", {}).get("distance_factor", 0.2))),
     )
 
 

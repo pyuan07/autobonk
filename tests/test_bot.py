@@ -1,3 +1,4 @@
+import math
 from dataclasses import replace
 from pathlib import Path
 
@@ -424,6 +425,35 @@ def test_weight_zero_targets_are_never_visited():
     assert holds(bot.step(ORE_AND_BALLS)) == [Hold(frozenset({"Tab"}))]
 
 
+def test_distance_factor_proximity_bonus():
+    bot = Bot(targets={"A": 10, "B": 9, "C": 7, "Zero": 0}, movement=Movement(distance_factor=0.2))
+    bot._now_weights = {"A": 10.0, "B": 9.0, "C": 7.0}
+
+    # B at dist 20 (close) vs A at dist 180 (far):
+    # B: norm_dist = 20/200 = 0.1 -> score = 9 * (1 + 0.2 * 0.9) = 10.62
+    # A: norm_dist = 180/200 = 0.9 -> score = 10 * (1 + 0.2 * 0.1) = 10.2
+    # Nearby weight 9 beats far weight 10:
+    candidates = [("A", (180, 0)), ("B", (20, 0))]
+    assert bot._best(candidates, (0, 0), scale=200.0)[0] == "B"
+
+    # With distance_factor = 0 (pure weight priority):
+    bot_strict = Bot(targets={"A": 10, "B": 9}, movement=Movement(distance_factor=0.0))
+    bot_strict._now_weights = {"A": 10.0, "B": 9.0}
+    assert bot_strict._best(candidates, (0, 0), scale=200.0)[0] == "A"
+
+    # Even right next to the player, lower weight 7 cannot overtake far weight 10:
+    # C: score = 7 * (1 + 0.2 * 1.0) = 8.4 < 10.2
+    candidates_c = [("A", (180, 0)), ("C", (0, 0))]
+    assert bot._best(candidates_c, (0, 0), scale=200.0)[0] == "A"
+
+    # Weight 0 still gets score 0 and is never boosted:
+    assert bot._candidate_score("Zero", (0, 0), (0, 0), 200.0)[0] == 0.0
+
+    # Boss always beats regular targets regardless of distance:
+    bot._now_weights["BOSS"] = math.inf
+    assert bot._best([("B", (0, 0)), ("BOSS", (200, 200))], (0, 0), scale=200.0)[0] == "BOSS"
+
+
 def standing_on(icon: str, timestamp: float) -> Frame:
     """A playing frame whose minimap shows only `icon` under the player."""
     from io import BytesIO
@@ -443,10 +473,11 @@ def test_presses_e_at_a_target_and_skips_it_when_nothing_happens():
     bot = Bot(targets={"喵喵": 5}, movement=Movement(target_ignore_s=60))
 
     assert Press("KeyE") in bot.step(standing_on("喵喵", 100.0))
-    assert Press("KeyE") not in bot.step(standing_on("喵喵", 101.0))
-    assert holds(bot.step(standing_on("喵喵", 101.5))) == []  # 1.5 s on: E did nothing, skip it
-    assert holds(bot.step(standing_on("喵喵", 101.6))) == [Hold(frozenset({"Tab"}))]
-    assert Press("KeyE") in bot.step(standing_on("喵喵", 162.0))
+    assert Press("KeyE") not in bot.step(standing_on("喵喵", 100.1))
+    assert Press("KeyE") in bot.step(standing_on("喵喵", 101.0))  # spams E while waiting
+    assert holds(bot.step(standing_on("喵喵", 105.0))) == []  # 5.0 s on: E did nothing, skip it
+    assert holds(bot.step(standing_on("喵喵", 105.1))) == [Hold(frozenset({"Tab"}))]
+    assert Press("KeyE") in bot.step(standing_on("喵喵", 166.0))
 
 
 def test_a_popup_after_e_means_it_worked():
@@ -517,3 +548,137 @@ def test_after_the_boss_falls_altars_count_again_and_it_is_not_summoned_twice():
 
     assert Press("KeyE") not in bot.step(beaten)
     assert "骷髅" not in bot._now_weights and "符文祭坛" in bot._now_weights
+
+
+def test_visible_hud_prompt_presses_e_and_stops_moving():
+    frame = replace(
+        run_frame("155925-987", 100.0),
+        dom_snapshot=run_frame("155925-987", 100.0).dom_snapshot + '<div class="prompt" style=""><kbd>E</kbd>打开超级球（免费）</div>',
+    )
+    bot = Bot()
+    bot._held = frozenset({"KeyW"})
+    commands = bot.step(frame)
+    assert Hold(frozenset()) in commands
+    assert Press("KeyE") in commands
+
+
+def test_hud_prompt_with_not_enough_money_is_ignored():
+    frame = replace(
+        run_frame("155925-987", 100.0),
+        dom_snapshot=run_frame("155925-987", 100.0).dom_snapshot + '<div class="prompt" style=""><kbd>E</kbd>老虎机 · 43 ₽（钱不够）</div>',
+    )
+    bot = Bot()
+    assert Press("KeyE") not in bot.step(frame)
+
+
+def test_boss_prompt_waits_until_strong_enough():
+    frame = replace(
+        run_frame("155925-987", 100.0),
+        dom_snapshot=run_frame("155925-987", 100.0).dom_snapshot + '<div class="prompt" style=""><kbd>E</kbd>唤醒守护者</div>',
+    )
+    bot = Bot(boss=BossRule(levels=(99, 99, 99), minutes_left=(0, 0, 0)))
+    assert Press("KeyE") not in bot.step(frame)
+
+
+
+def test_boss_down_banners_and_portal_detection():
+    # Guardian beaten banner (from 20261028 run)
+    obs_guardian = perceive(load_frame(FRAMES / "frame-20261028-022542-352"))
+    assert obs_guardian.boss_down
+    assert obs_guardian.portal is not None
+
+    # Head boss defeated banner
+    obs_head = perceive(run_frame("155654-906", 0.0))
+    assert obs_head.boss_down
+
+    # Frame with toast warning: unopened super balls
+    obs_toast = perceive(run_frame("160041-764", 0.0))
+    assert obs_toast.has_unopened_super_balls
+    assert obs_toast.portal is not None
+
+    # Frame with active portal
+    obs_portal = perceive(run_frame("214628-985", 0.0))
+    assert obs_portal.portal == (-14, -82)
+
+
+def test_after_boss_opens_nearby_super_balls_before_entering_portal():
+    f3 = run_frame("214628-985", 100.0)
+    bot = Bot(targets={"符文祭坛": 7.0, "超级球": 10.0, "精灵球": 5.0})
+    bot.step(f3)  # initialize zone to 区域 1/3
+    bot._boss_beaten = True
+
+    # 1. When super balls are nearby, bot targets super ball first
+    obs_with_balls = perceive(f3, bot._icons)
+    commands = bot._move(obs_with_balls, 100.5)
+    assert bot._target in ("超级球", "礼物球")
+
+    # 2. If standing on portal prompt while super balls remain, do NOT enter portal
+    obs_at_portal_with_balls = replace(obs_with_balls, prompt=("E", "进入传送门"), portal=(0, 0))
+    portal_commands = bot._move(obs_at_portal_with_balls, 100.6)
+    assert Press("KeyE") not in portal_commands
+
+    # 3. When no super balls remain, bot targets portal and enters it
+    obs_portal_only = replace(obs_with_balls, targets=())
+    portal_move = bot._move(obs_portal_only, 101.0)
+    assert bot._target == "传送门"
+    assert Hold(frozenset({"KeyW"})) in portal_move
+
+    # 4. At the portal with no super balls remaining, bot presses E
+    obs_at_portal = replace(obs_with_balls, targets=(), portal=(0, 0), prompt=("E", "进入传送门"))
+    enter_commands = bot._move(obs_at_portal, 101.5)
+    assert Press("KeyE") in enter_commands
+
+
+def test_remembers_close_target_position_when_player_arrow_blocks_icon():
+    bot = Bot(targets={"百变怪": 10.0})
+    base_obs = perceive(run_frame("155925-987", 100.0), bot._icons)
+
+    # 1. Target seen at 20 px east: bot walks east and saves temp (x, y)
+    obs_close = replace(base_obs, targets=(("百变怪", (20, 0)),))
+    cmds1 = bot._move(obs_close, 100.0)
+    assert Hold(frozenset({"KeyD"})) in cmds1
+    assert Press("KeyE") in cmds1
+
+    # 2. Next step (0.4 s later): player arrow covers the icon so targets=() on minimap.
+    # Bot keeps walking east toward the remembered temp (x, y) and spams E instead of opening Tab!
+    obs_blocked = replace(base_obs, targets=())
+    cmds2 = bot._move(obs_blocked, 100.4)
+    assert bot._held == frozenset({"KeyD"})
+    assert Press("KeyE") in cmds2
+
+    # 3. Once the remembered position reaches <= 4 px (at 101.0 s), bot stops on the spot and spams E.
+    cmds3 = bot._move(obs_blocked, 101.0)
+    assert Hold(frozenset()) in cmds3
+    assert Press("KeyE") in cmds3
+
+    # 4. If 5 s pass without popup/charging (e.g. blocked or no money), target is ignored and bot explores.
+    bot._move(obs_blocked, 105.1)
+    cmds4 = bot._move(obs_blocked, 105.2)
+    assert Hold(frozenset({"Tab"})) in cmds4
+
+
+def test_overtime_countdown_is_recognised_with_zero_seconds_left():
+    overtime = run_frame("232940-022", 100.0)
+    obs = perceive(overtime)
+    assert obs.countdown == "+1:09"
+    assert obs.seconds_left == 0
+    assert obs.recognised
+
+
+def test_boss_on_zonemap_is_targeted_and_not_stopped_by_charging_altars():
+    f1 = load_frame(FRAMES / "frame-20261030-232650-966")
+    bot = Bot(boss=BossRule(levels=(35, 60, 80), minutes_left=(4, 8, 8)))
+    cmds1 = bot.step(f1)
+    # Boss is ready and chosen from the ZoneMap; bot heads toward it holding Tab
+    assert bot._target == "骷髅"
+    assert Hold(frozenset({"Tab", "KeyW", "KeyD"})) in cmds1
+
+    # On a subsequent frame with an altar charging on the minimap, bot does NOT freeze in altar ring:
+    # it keeps holding Tab + movement keys and does not release them.
+    f2 = load_frame(FRAMES / "frame-20261030-232745-637")
+    cmds2 = bot.step(f2)
+    assert bot._target == "骷髅"
+    assert bot._held == frozenset({"Tab", "KeyW", "KeyD"})
+    assert Hold(frozenset()) not in cmds2
+
+

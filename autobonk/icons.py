@@ -14,6 +14,7 @@ ICON_DIR = Path(__file__).parent / "icons"
 # Name as shown in the editor and autobonk.toml [targets.weights] -> template file.
 ITEM_ICONS = {
     "精灵球": "pokeball.png",
+    "超级球": "gift.png",
     "礼物球": "gift.png",
     "矿堆": "ore.png",
     "金币": "coin.png",

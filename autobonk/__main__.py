@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> None:
                     target_ignore_s=config.target_ignore_s,
                     stuck_s=config.stuck_s,
                     sidestep_s=config.sidestep_s,
+                    distance_factor=config.distance_factor,
                 ),
                 config.targets,
                 config.boss,

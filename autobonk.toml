@@ -33,11 +33,42 @@ target_ignore_s = 60
 # step left (next time right) for sidestep_s, then walk on.
 stuck_s = 2.5
 sidestep_s = 0.6
+# Distance proximity bonus factor (e.g. 0.2 = up to +20% score for targets right next to the player).
+# Weight remains the main priority; 0.2 allows a nearby weight-9 target to beat a far-away weight-10 target.
+# Set to 0 to only consider distance as a tie-breaker.
+distance_factor = 0.2
 
 [record]
 # While the bot is paused (you are playing), every popup pick you make is appended here,
 # with all the cards offered, so your choices can be studied to set card weights.
 choices_file = "logs/choices.jsonl"
+
+[targets.weights]
+# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes
+# first, then the nearest; 0 or unlisted = never. [start, end]: the weight grows from start
+# to end as the zone's time runs out. At an altar the bot stands in the ring; at anything else
+# it presses E. Each icon listed costs ~15 ms per step to look for.
+"礼物球" = 10
+"毒球" = 10
+"卡比兽" = 10
+"百变怪" = [0, 10]
+"铁甲犀牛" = 10
+"矿堆" = 9
+"绿水晶" = 8
+"符文祭坛" = 7
+"精灵球" = [3, 7]
+"喵喵" = [0, 7]
+"耿鬼" = [3, 7]
+"牢笼" = [0, 6]
+"双剑" = 6
+"磁铁" = [0, 6]
+"多边兽" = 6
+
+[targets.boss]
+# The area boss (骷髅): summoned with E in zone N once the level reaches levels[N-1], or once
+# only minutes_left[N-1] are left; then it comes first. While it chases, altars are left.
+levels = [35, 60, 80]
+minutes_left = [4, 8, 8]
 
 [cards]
 active_pokemon = "超梦"
@@ -58,7 +89,12 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 # Priority 9
 "+幸运" = 9
 "全满药" = 9
+"基因霸权" = 9
+"幻象光线" = 9
 "星星碎片" = 9
+"棱镜镭射" = 9
+"精神击破" = 9
+"精神突进" = 9
 "觉醒之石" = 9
 "讲究眼镜" = 9
 "ＰＰ单项小补剂" = 9
@@ -87,7 +123,6 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "代币盒" = 7
 "充电电池" = 7
 "博识眼镜" = 7
-"星星沙子" = 7
 "生命宝珠" = 7
 "神奇糖果" = 7
 "银色之羽" = 7
@@ -96,26 +131,45 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "先制之爪" = 6
 "学习装置" = 6
 "强制锻炼器" = 6
+"星星沙子" = 6
 "秘密钥匙" = 6
 "讲究围巾" = 6
+"ＰＰ提升剂" = 6
 
 # Priority 5
 "吉利拳" = 5
 "幸运蛋" = 5
+"广域战力" = 5
+"弯曲的汤匙" = 5
 "强力香草" = 5
+"戏法空间" = 5
 "气球" = 5
 "特攻增强剂" = 5
+"白雾" = 5
 "锐利之爪" = 5
+"预知未来" = 5
 
 # Priority 4
 "广角镜" = 4
-"诅咒薰香" = 4
 
 # Priority 3
 "速度粉" = 3
 
+# Priority 2
+"诅咒薰香" = 2
+
 # Avoid (-1)
-"破旧钓竿" = -1
+"丝绸围巾" = -1
+"力量头带" = -1
+"奇迹种子" = -1
+"妖精之羽" = -1
+"木炭" = -1
+"柔软沙子" = -1
+"硬石头" = -1
+"神秘水滴" = -1
+"银粉" = -1
+"锐利鸟嘴" = -1
+"龙之牙" = -1
 
 # Avoid (-5)
 "+再生" = -5
@@ -125,9 +179,33 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "+持续时间" = -5
 "+暴击率" = -5
 "+最大 HP" = -5
+"MissingNo." = -5
+"力量强化" = -5
+"命中强化" = -5
+"好伤药" = -5
+"宝可追踪" = -5
+"屏障" = -5
+"投球" = -5
+"攻击增强剂" = -5
+"机变骰子" = -5
+"波导弹" = -5
+"爱心印章" = -5
+"特防增强剂" = -5
+"白银香水" = -5
+"离洞绳" = -5
 "秘密琥珀" = -5
+"精神利刃" = -5
+"精神扭曲" = -5
+"谜芝果" = -5
 "贝壳化石" = -5
+"速度增强剂" = -5
+"速度强化" = -5
+"金珠" = -5
+"防御增强剂" = -5
+"防御强化" = -5
 "附着针" = -5
+"ＨＰ增强剂" = -5
+"ＰＰ多项小补剂" = -5
 
 [cards.pokemon."超梦"]
 # Specific skill priorities and overrides for 超梦
@@ -138,6 +216,10 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "精神击破" = 9
 "精神突进" = 9
 
+# Priority 6
+"星星沙子" = 6
+"ＰＰ提升剂" = 6
+
 # Priority 5
 "广域战力" = 5
 "弯曲的汤匙" = 5
@@ -145,8 +227,12 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "白雾" = 5
 "预知未来" = 5
 
+# Priority 2
+"诅咒薰香" = 2
+
 # Neutral (0): ignore the shared weight
 "破旧钓竿" = 0
+"经验糖果" = 0
 
 # Avoid (-1)
 "丝绸围巾" = -1
@@ -163,37 +249,26 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 
 # Avoid (-5)
 "MissingNo." = -5
+"力量强化" = -5
+"命中强化" = -5
+"好伤药" = -5
+"宝可追踪" = -5
 "屏障" = -5
 "投球" = -5
+"攻击增强剂" = -5
+"机变骰子" = -5
 "波导弹" = -5
 "爱心印章" = -5
+"特防增强剂" = -5
+"白银香水" = -5
+"离洞绳" = -5
 "精神利刃" = -5
 "精神扭曲" = -5
-
-[targets.weights]
-# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes
-# first, then the nearest; 0 or unlisted = never. At an altar the bot stands in the ring; at
-# anything else it presses E. Each icon listed costs ~15 ms per step to look for.
-# Priority 10
-"卡比兽" = 10
-"毒球" = 10
-"礼物球" = 10
-"铁甲犀牛" = 10
-
-# Priority 9
-"矿堆" = 9
-
-# Priority 7
-"符文祭坛" = 7
-
-# Priority 6
-"双剑" = 6
-
-# Priority 5
-"精灵球" = 5
-
-[targets.boss]
-# The area boss (骷髅): summoned with E in zone N once the level reaches levels[N-1], or once
-# only minutes_left[N-1] are left; then it comes first. While it chases, altars are left.
-levels = [35, 60, 80]
-minutes_left = [4, 8, 8]
+"谜芝果" = -5
+"速度增强剂" = -5
+"速度强化" = -5
+"金珠" = -5
+"防御增强剂" = -5
+"防御强化" = -5
+"ＨＰ增强剂" = -5
+"ＰＰ多项小补剂" = -5

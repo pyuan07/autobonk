@@ -44,6 +44,15 @@ def test_repo_config_stub_loads():
     config = load_config(Path(__file__).parent.parent / "autobonk.toml")
 
     assert config.url == "https://pokebonk.com/"
+    assert config.distance_factor == 0.2
+
+
+def test_distance_factor_configurable_or_defaults(tmp_path):
+    path = tmp_path / "autobonk.toml"
+    path.write_text('[bot]\ndistance_factor = 0.35\n', encoding="utf-8")
+
+    assert load_config(path).distance_factor == 0.35
+    assert load_config(tmp_path / "nope.toml").distance_factor == 0.2
 
 
 def test_same_key_for_both_hotkeys_is_rejected(tmp_path):

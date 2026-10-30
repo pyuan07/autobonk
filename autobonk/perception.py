@@ -1,5 +1,6 @@
 """Turns a Frame into an Observation. DOM-first: HUD and popups are read by visible text."""
 
+import math
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -14,13 +15,13 @@ from autobonk.zonemap import ZoneMap, read_zonemap
 EndScreen = Literal["win", "lose"]
 
 END_TITLES: dict[str, EndScreen] = {"胜利": "win", "你倒下了": "lose"}
-COUNTDOWN = re.compile(r"\d{1,2}:\d{2}")
+COUNTDOWN = re.compile(r"\+?\d{1,2}:\d{2}")
 CARD_KEY = re.compile(r"\[(\d)\]")
 # The progress bubble over a rune altar (or ore pile) the player stands in: a bare "29%".
 CHARGE = re.compile(r"\d{1,3}%")
 ZONE = re.compile(r"区域 \d+/\d+")
 # The area boss's banner once it is beaten: "头目水伊布倒下了！".
-BOSS_DOWN = re.compile(r"头目.+倒下了[!！]?")
+BOSS_DOWN = re.compile(r"(?:头目.+倒下了|(?:守护者|传说宝可梦)已被击败|通往下一区域的传送门已打开|进入传送门以通关地图)[!！]?")
 # Over a rune altar that can't be charged yet: "封印中・13秒后苏醒".
 SEALED = re.compile(r"封印中.(\d+)秒后苏醒")
 # The "还有 N 个图像未加载 [重试]" corner notice is not a popup.
@@ -59,11 +60,16 @@ class Observation:
     targets: tuple[tuple[str, Point], ...] = ()  # other icons asked for on the minimap, nearest first
     level: int | None = None  # the player's level (HUD "Lv 35")
     boss_down: bool = False  # the "头目…倒下了！" banner shows: the area boss is beaten
+    prompt: tuple[str, str] | None = None  # (key, text) shown in HUD prompt when in range of an object
+    portal: Point | None = None  # (dx, dy) relative to player on minimap scale, or (0, 0) if at portal
+    has_unopened_super_balls: bool = False  # game toast says unopened super balls nearby
 
     @property
     def seconds_left(self) -> int | None:
         if self.countdown is None:
             return None
+        if self.countdown.startswith("+"):
+            return 0
         minutes, seconds = self.countdown.split(":")
         return int(minutes) * 60 + int(seconds)
 
@@ -89,12 +95,19 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
     zone = next((t for t in texts if ZONE.fullmatch(t)), None)
     team_view = ("button", TEAM_VIEW_BUTTON) in nodes
     sealed = next((m for m in map(SEALED.fullmatch, texts) if m), None)
+    portal = _portal(frame.dom_snapshot)
+    prompt = _prompt(frame.dom_snapshot)
+    has_unopened = bool(re.search(r"附近还有\d+个超级球没打开", frame.dom_snapshot))
+    boss_down = any(BOSS_DOWN.fullmatch(t) for t in texts)
     return Observation(
         end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
         north_bearing(frame.minimap), read_zonemap(frame.zonemap, targets), zone, team_view,
         int(sealed.group(1)) if sealed else None, _minimap_targets(frame.minimap, targets),
         next((int(texts[i + 1]) for i, t in enumerate(texts[:-1]) if t == "Lv" and texts[i + 1].isdigit()), None),
-        any(BOSS_DOWN.fullmatch(t) for t in texts),
+        boss_down,
+        prompt,
+        portal,
+        has_unopened,
     )
 
 
@@ -167,6 +180,52 @@ def visible_texts(html: str) -> list[str]:
 def visible_nodes(html: str) -> list[tuple[str, str]]:
     """Like `visible_texts`, paired with each text's enclosing tag."""
     return _parse(html).nodes
+
+
+PROMPT_RE = re.compile(
+    r'<div class="prompt"(?![^>]*display\s*:\s*none)[^>]*>(?:<kbd[^>]*>([A-Za-z0-9]+)</kbd>)?(.*?)(?:</div>|$)',
+    re.DOTALL,
+)
+
+
+def _portal(html: str) -> Point | None:
+    # 1. Active wlabel has --p (progress/radius)
+    m = re.search(
+        r'<div class="wlabel[^"]*"[^>]*style="([^"]*--p:[^"]*)"[^>]*data-k="nportal"[^>]*>',
+        html,
+    )
+    if m:
+        style = m.group(1)
+        m_pos = re.search(r'left:\s*([\d\.]+)px;\s*top:\s*([\d\.]+)px', style)
+        if m_pos:
+            left, top = float(m_pos.group(1)), float(m_pos.group(2))
+            m_under = re.search(r'<div class="under"[^>]*style="left:\s*([\d\.]+)px;\s*top:\s*([\d\.]+)px', html)
+            px, py = (float(m_under.group(1)), float(m_under.group(2))) if m_under else (800.0, 480.0)
+            return (int(round((left - px) / 2.3)), int(round((top - py) / 2.3)))
+
+    # 2. If prompt is for portal, we are already at it
+    m_prompt = PROMPT_RE.search(html)
+    if m_prompt and any(k in m_prompt.group(0) for k in ("进入传送门", "离开圣地")):
+        return (0, 0)
+
+    # 3. Compass active pointer
+    m_c = re.search(r'<div class="compass[^"]*"[^>]*data-k="portal".*?rotate\(([\d\.\-]+)rad\)', html, re.DOTALL)
+    if m_c:
+        rad = float(m_c.group(1))
+        return (int(round(math.sin(rad) * 100.0)), int(round(-math.cos(rad) * 100.0)))
+
+    return None
+
+
+def _prompt(html: str) -> tuple[str, str] | None:
+    m = PROMPT_RE.search(html)
+    if not m:
+        return None
+    key = m.group(1) or "E"
+    text = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+    if not text or "钱不够" in text:
+        return None
+    return (key, text)
 
 
 def _parse(html: str) -> "_VisibleText":
