@@ -20,7 +20,7 @@ autobonk = "autobonk.__main__:main"
 packages = ["autobonk"]
 
 [tool.setuptools.package-data]
-autobonk = ["*.json", "*.html", "*.png"]
+autobonk = ["*.json", "*.html", "*.png", "icons/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

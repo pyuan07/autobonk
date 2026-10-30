@@ -2,6 +2,8 @@ from pathlib import Path
 
 from autobonk.zonemap import read_zonemap
 
+FRAMES = Path(__file__).parent.parent / "fixtures" / "frames"
+
 ZONEMAP = Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261030-170001-415.zonemap.png"
 BORDER, SIDE = 28, 681  # the dashed zone border inside the 738x738 canvas
 
@@ -29,3 +31,11 @@ def test_reads_discovered_rune_altars():
 
 def test_no_zone_map_while_tab_is_up():
     assert read_zonemap(b"") is None
+
+
+def test_finds_the_icons_asked_for():
+    zone = read_zonemap((FRAMES / "frame-20261030-174232-152.zonemap.png").read_bytes(), ("喵喵", "骷髅"))
+
+    assert sorted(name for name, _ in zone.targets) == ["喵喵", "骷髅"]
+    [(_, (x, y))] = [t for t in zone.targets if t[0] == "喵喵"]
+    assert 0.45 < x < 0.5 and y < 0.02  # top middle

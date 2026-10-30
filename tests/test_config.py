@@ -32,6 +32,14 @@ def test_file_overrides_defaults_and_paths_resolve_against_file(tmp_path):
     assert config.frame_hotkey == "f9"
 
 
+def test_target_weights_come_from_their_own_table(tmp_path):
+    path = tmp_path / "autobonk.toml"
+    path.write_text('[targets.weights]\n"精灵球" = 5\n\n[cards.weights]\n"精灵球" = 1\n', encoding="utf-8")
+
+    assert load_config(path).targets == {"精灵球": 5}
+    assert load_config(tmp_path / "nope.toml").targets == {"符文祭坛": 10}
+
+
 def test_repo_config_stub_loads():
     config = load_config(Path(__file__).parent.parent / "autobonk.toml")
 

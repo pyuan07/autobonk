@@ -75,25 +75,53 @@ def _template(path: Path) -> np.ndarray:
 
 def _match(image: np.ndarray, template: np.ndarray) -> np.ndarray:
     """Normalised cross-correlation of `template` at every top-left position, via FFT."""
+    return match_many(image, [template])[0]
+
+
+def match_many(image: np.ndarray, templates: list[np.ndarray]) -> list[np.ndarray]:
+    """`_match` for several same-sized templates, sharing the image's spectra and window sums."""
     height, width = image.shape[:2]
-    h, w = template.shape[:2]
+    h, w = templates[0].shape[:2]
     n = h * w * 3
-    normalised = (template - template.mean()) / template.std()
-
-    def spectrum(channel: np.ndarray) -> np.ndarray:
-        return np.fft.rfft2(channel, (height, width))
-
-    correlation = sum(
-        np.fft.irfft2(spectrum(image[..., c]) * np.conj(spectrum(normalised[..., c])), (height, width))
-        for c in range(3)
-    )[: height - h + 1, : width - w + 1]
+    shape = (_fast_length(height), _fast_length(width))
 
     def window_sums(values: np.ndarray) -> np.ndarray:
         # float64: running sums of squares reach ~1e11, beyond float32's precision.
         s = np.pad(values.cumsum(0, dtype=np.float64).cumsum(1), ((1, 0), (1, 0)))
         return s[h:, w:] - s[:-h, w:] - s[h:, :-w] + s[:-h, :-w]
 
-    mean = sum(window_sums(image[..., c]) for c in range(3)) / n
-    mean_square = sum(window_sums(image[..., c] ** 2) for c in range(3)) / n
+    image_spectra = np.fft.rfft2(image, shape, axes=(0, 1))
+    mean = window_sums(image.sum(axis=2)) / n
+    mean_square = window_sums((image**2).sum(axis=2)) / n
     std = np.sqrt(np.maximum(mean_square - mean**2, 1e-6))
-    return correlation / n / std
+
+    results = []
+    for template in templates:
+        product = (image_spectra * _template_spectrum(template, shape)).sum(axis=2)
+        correlation = np.fft.irfft2(product, shape)[: height - h + 1, : width - w + 1]
+        results.append(correlation / n / std)
+    return results
+
+
+_spectra: dict[tuple[int, tuple[int, int]], np.ndarray] = {}
+
+
+def _template_spectrum(template: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
+    """Conjugate spectrum of the zero-mean, unit-variance template; cached for the cached templates."""
+    key = (id(template), shape)
+    if key not in _spectra:
+        normalised = (template - template.mean()) / template.std()
+        _spectra[key] = np.conj(np.fft.rfft2(normalised, shape, axes=(0, 1)))
+    return _spectra[key]
+
+
+def _fast_length(size: int) -> int:
+    """The smallest length >= size with no prime factor above 5 (FFTs of those are fast)."""
+    while True:
+        rest = size
+        for prime in (2, 3, 5):
+            while rest % prime == 0:
+                rest //= prime
+        if rest == 1:
+            return size
+        size += 1

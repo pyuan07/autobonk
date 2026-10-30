@@ -249,7 +249,7 @@ def test_gives_up_on_an_altar_that_charges_longer_than_the_cap():
     bot.step(run_frame("155222-698", 100.0))  # charging starts
     bot.step(run_frame("155227-456", 144.0))
 
-    # Past the cap the altar is left: hold Tab to explore elsewhere, for altar_ignore_s.
+    # Past the cap the altar is left: hold Tab to explore elsewhere, for target_ignore_s.
     assert holds(bot.step(run_frame("155227-456", 146.0))) == [Hold(frozenset({"Tab"}))]
     assert holds(bot.step(run_frame("155220-116", 147.0))) == []
     assert holds(bot.step(run_frame("155220-116", 207.0))) == [Hold(frozenset({"KeyW"}))]
@@ -402,3 +402,56 @@ def test_a_sealed_altar_is_left_to_explore_until_it_wakes():
     assert holds(bot.step(SEALED)) == [Hold(frozenset({"Tab"}))]
     assert holds(bot.step(run_frame("155220-116", 112.0))) == []  # an altar ahead, still ignored
     assert holds(bot.step(run_frame("155220-116", 113.0))) == [Hold(frozenset({"KeyW"}))]
+
+
+ORE_AND_BALLS = run_frame("173711-697", 100.0)  # minimap: 3 ore, 2 Poké Balls (nearest up-left), a coin
+
+
+def test_finds_the_icons_asked_for_on_the_minimap():
+    found = perceive(ORE_AND_BALLS, ("精灵球", "矿堆", "金币")).targets
+
+    assert sorted(name for name, _ in found) == ["矿堆", "矿堆", "矿堆", "精灵球", "精灵球", "金币"]
+    assert perceive(ORE_AND_BALLS).targets == ()  # nothing asked for, nothing matched
+
+
+def test_walks_to_the_highest_weight_target_then_the_nearest():
+    assert holds(Bot(targets={"精灵球": 5, "矿堆": 3}).step(ORE_AND_BALLS)) == [Hold(frozenset({"KeyW", "KeyA"}))]
+
+
+def test_weight_zero_targets_are_never_visited():
+    bot = Bot(targets={"精灵球": 0, "符文祭坛": 0})
+
+    assert holds(bot.step(ORE_AND_BALLS)) == [Hold(frozenset({"Tab"}))]
+
+
+def standing_on(icon: str, timestamp: float) -> Frame:
+    """A playing frame whose minimap shows only `icon` under the player."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    from autobonk.icons import ICON_DIR, ICONS
+
+    minimap = Image.new("RGB", (400, 400), (130, 120, 140))
+    minimap.paste(Image.open(ICON_DIR / ICONS[icon]), (190, 186))
+    out = BytesIO()
+    minimap.save(out, "PNG")
+    return replace(run_frame("155925-987", timestamp), minimap=out.getvalue())
+
+
+def test_presses_e_at_a_target_and_skips_it_when_nothing_happens():
+    bot = Bot(targets={"喵喵": 5}, movement=Movement(target_ignore_s=60))
+
+    assert Press("KeyE") in bot.step(standing_on("喵喵", 100.0))
+    assert Press("KeyE") not in bot.step(standing_on("喵喵", 101.0))
+    assert holds(bot.step(standing_on("喵喵", 101.5))) == []  # 1.5 s on: E did nothing, skip it
+    assert holds(bot.step(standing_on("喵喵", 101.6))) == [Hold(frozenset({"Tab"}))]
+    assert Press("KeyE") in bot.step(standing_on("喵喵", 162.0))
+
+
+def test_a_popup_after_e_means_it_worked():
+    bot = Bot(targets={"精灵球": 5})
+    bot.step(standing_on("精灵球", 100.0))
+    bot.step(replace(LEVEL_UP, timestamp=100.5))
+
+    assert Press("KeyE") in bot.step(standing_on("精灵球", 101.6))

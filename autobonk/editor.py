@@ -1,4 +1,4 @@
-"""Local web GUI for viewing and editing PokéBonk card weights in autobonk.toml."""
+"""Local web GUI for viewing and editing PokéBonk card weights and map target weights in autobonk.toml."""
 
 import argparse
 import json
@@ -11,12 +11,25 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from autobonk.cards import blessing_key
+from autobonk.icons import ICON_DIR, ITEM_ICONS, POKEMON_ICONS
+from autobonk.minimap import ALTAR_TEMPLATE
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CATALOG_PATH = Path(__file__).resolve().parent / "catalog_data.json"
 UI_HTML_PATH = Path(__file__).resolve().parent / "editor_ui.html"
+TARGETS_HTML_PATH = Path(__file__).resolve().parent / "targets_ui.html"
+ALTAR_NAME = "符文祭坛"
+DEFAULT_TARGET_WEIGHTS = {ALTAR_NAME: 10.0}
+# Every map icon the bot can look for, grouped as the targets page shows them: name -> image.
+TARGET_GROUPS: list[tuple[str, dict[str, Path]]] = [
+    ("祭坛", {ALTAR_NAME: ALTAR_TEMPLATE}),
+    ("物品与设施", {name: ICON_DIR / file for name, file in ITEM_ICONS.items()}),
+    ("宝可梦（商店、教学、头目）", {name: ICON_DIR / file for name, file in POKEMON_ICONS.items()}),
+]
+TARGET_IMAGES = {name: path for _, icons in TARGET_GROUPS for name, path in icons.items()}
 DEFAULT_RARITY_ORDER = ["招式", "传说", "史诗", "稀有", "少见", "普通"]
 
 
@@ -58,6 +71,44 @@ def read_config_weights(
     return baseline_weights, rarity_order, active_pokemon, pokemon_profiles
 
 
+def read_target_weights(toml_path: Path) -> dict[str, float]:
+    if not toml_path.exists():
+        return dict(DEFAULT_TARGET_WEIGHTS)
+    data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+    return dict(data.get("targets", {}).get("weights", DEFAULT_TARGET_WEIGHTS))
+
+
+def save_target_weights(toml_path: Path, weights: dict[str, float]) -> None:
+    """Rewrites [targets.weights] (separate from the card weights); every other table is kept as is."""
+    content = toml_path.read_text(encoding="utf-8") if toml_path.exists() else ""
+    other = _strip_tables(content, "targets")
+    lines = [other.rstrip() + "\n\n" if other.strip() else ""]
+    lines.append("[targets.weights]\n")
+    lines.append("# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes\n")
+    lines.append("# first, then the nearest; 0 or unlisted = never. At an altar the bot stands in the ring; at\n")
+    lines.append("# anything else it presses E. Each icon listed costs ~15 ms per step to look for.\n")
+    _write_weights_table(lines, weights)
+    _write_toml(toml_path, "".join(lines))
+
+
+def _write_toml(toml_path: Path, text: str) -> None:
+    new_toml = text.rstrip() + "\n"
+    tomllib.loads(new_toml)  # never write a file the bot can't read
+    tmp_path = toml_path.with_name(toml_path.name + ".tmp")
+    tmp_path.write_text(new_toml, encoding="utf-8")
+    os.replace(tmp_path, toml_path)
+
+
+def target_list(toml_path: Path) -> dict[str, Any]:
+    weights = read_target_weights(toml_path)
+    return {
+        "groups": [
+            {"title": title, "icons": [{"name": name, "weight": weights.get(name, 0)} for name in icons]}
+            for title, icons in TARGET_GROUPS
+        ],
+    }
+
+
 def save_config_weights(
     toml_path: Path,
     baseline_weights: dict[str, float],
@@ -67,7 +118,7 @@ def save_config_weights(
 ) -> None:
     """Rewrites [cards], [cards.weights], and [cards.pokemon.<name>]; every other table is kept as is."""
     content = toml_path.read_text(encoding="utf-8") if toml_path.exists() else ""
-    other = _strip_cards_tables(content)
+    other = _strip_tables(content, "cards")
     prefix = other.rstrip() + "\n\n" if other.strip() else ""
 
     lines = [prefix]
@@ -102,26 +153,22 @@ def save_config_weights(
             # 0 is kept here: it sets a shared weight back to neutral for this Pokémon.
             _write_weights_table(lines, p_weights, keep_zero=True)
 
-    new_toml = "".join(lines).rstrip() + "\n"
-    tomllib.loads(new_toml)  # never write a file the bot can't read
-    tmp_path = toml_path.with_name(toml_path.name + ".tmp")
-    tmp_path.write_text(new_toml, encoding="utf-8")
-    os.replace(tmp_path, toml_path)
+    _write_toml(toml_path, "".join(lines))
 
 
 _TABLE_HEADER = re.compile(r"^\s*\[\[?\s*([^\]]+?)\s*\]")
 
 
-def _strip_cards_tables(content: str) -> str:
-    """Drops [cards] and every [cards.*] table (they get rewritten); keeps all other tables and comments."""
+def _strip_tables(content: str, root: str) -> str:
+    """Drops [root] and every [root.*] table (they get rewritten); keeps all other tables and comments."""
     kept: list[str] = []
-    in_cards = False
+    inside = False
     for line in content.splitlines(keepends=True):
         header = _TABLE_HEADER.match(line)
         if header:
             name = header.group(1)
-            in_cards = name == "cards" or name.startswith("cards.")
-        if not in_cards:
+            inside = name == root or name.startswith(root + ".")
+        if not inside:
             kept.append(line)
     return "".join(kept)
 
@@ -231,17 +278,25 @@ def make_handler(config_path: Path):
         def log_request(self, code: Any = "-", size: Any = "-") -> None:
             pass
 
-        def _send(self, status: HTTPStatus, content_type: str, body: str) -> None:
+        def _send(self, status: HTTPStatus, content_type: str, body: str | bytes) -> None:
             self.send_response(status)
-            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+            self.send_header("Content-Type", f"{content_type}; charset=utf-8" if isinstance(body, str) else content_type)
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            self.wfile.write(body.encode("utf-8"))
+            self.wfile.write(body.encode("utf-8") if isinstance(body, str) else body)
 
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
             if path in ("/", "/index.html"):
                 self._send(HTTPStatus.OK, "text/html", UI_HTML_PATH.read_text(encoding="utf-8"))
+            elif path == "/targets":
+                self._send(HTTPStatus.OK, "text/html", TARGETS_HTML_PATH.read_text(encoding="utf-8"))
+            elif path == "/api/targets":
+                data = target_list(config_path)
+                data["config_path"] = str(config_path)
+                self._send(HTTPStatus.OK, "application/json", json.dumps(data, ensure_ascii=False))
+            elif path.startswith("/icons/") and unquote(path[len("/icons/"):]) in TARGET_IMAGES:
+                self._send(HTTPStatus.OK, "image/png", TARGET_IMAGES[unquote(path[len("/icons/"):])].read_bytes())
             elif path == "/api/data":
                 data = build_full_card_list(config_path)
                 data["config_path"] = str(config_path)
@@ -261,7 +316,7 @@ def make_handler(config_path: Path):
             )
 
         def do_POST(self) -> None:
-            if self.path != "/api/save":
+            if self.path not in ("/api/save", "/api/targets"):
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
             if not self._same_origin():
@@ -275,6 +330,10 @@ def make_handler(config_path: Path):
             body = self.rfile.read(length)
             try:
                 data = json.loads(body.decode("utf-8"))
+                if self.path == "/api/targets":
+                    save_target_weights(config_path, _numeric(data.get("weights", {})))
+                    self._send(HTTPStatus.OK, "application/json", json.dumps({"status": "ok"}))
+                    return
                 baseline_weights = data.get("baseline_weights", {})
                 # If legacy payload sent 'weights', treat as baseline
                 if not baseline_weights and "weights" in data:
@@ -317,7 +376,7 @@ def run_editor(config_path: Path, port: int = 8080, open_browser: bool = True) -
 
     url = f"http://127.0.0.1:{actual_port}/"
     print("\n=======================================================")
-    print("  PokéBonk Card Weight Editor is running!")
+    print("  PokéBonk Weight Editor is running! (cards /, map targets /targets)")
     print(f"  Config: {config_path}")
     print(f"  Open in browser: {url}")
     print("  Press Ctrl+C to stop the server.")

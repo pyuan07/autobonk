@@ -7,7 +7,8 @@ from typing import Literal
 
 from autobonk.cards import Card
 from autobonk.frames import Frame
-from autobonk.minimap import Point, find_altars, north_bearing
+from autobonk.icons import find_targets
+from autobonk.minimap import CENTRE, Point, find_altars, load_rgb, north_bearing
 from autobonk.zonemap import ZoneMap, read_zonemap
 
 EndScreen = Literal["win", "lose"]
@@ -53,13 +54,15 @@ class Observation:
     zone: str | None = None  # "区域 1/3"
     team_view: bool = False  # the team view covers the popup: its keys do nothing until it closes
     sealed_s: int | None = None  # an altar on screen is sealed for this many more seconds
+    targets: tuple[tuple[str, Point], ...] = ()  # other icons asked for on the minimap, nearest first
 
     @property
     def recognised(self) -> bool:
         return self.end_screen is not None or self.countdown is not None or self.popup is not None
 
 
-def perceive(frame: Frame) -> Observation:
+def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
+    """`targets`: names of map icons (autobonk.icons) to look for besides rune altars."""
     parsed = _parse(frame.dom_snapshot)
     nodes = parsed.nodes
     texts = [text for _, text in nodes]
@@ -72,9 +75,16 @@ def perceive(frame: Frame) -> Observation:
     sealed = next((m for m in map(SEALED.fullmatch, texts) if m), None)
     return Observation(
         end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
-        north_bearing(frame.minimap), read_zonemap(frame.zonemap), zone, team_view,
-        int(sealed.group(1)) if sealed else None,
+        north_bearing(frame.minimap), read_zonemap(frame.zonemap, targets), zone, team_view,
+        int(sealed.group(1)) if sealed else None, _minimap_targets(frame.minimap, targets),
     )
+
+
+def _minimap_targets(png: bytes, targets: tuple[str, ...]) -> tuple[tuple[str, Point], ...]:
+    if not png or not targets:
+        return ()
+    found = [(name, (x - CENTRE, y - CENTRE)) for name, (x, y) in find_targets(load_rgb(png), list(targets))]
+    return tuple(sorted(found, key=lambda t: t[1][0] ** 2 + t[1][1] ** 2))
 
 
 def _popup(nodes: list[tuple[str, str]], scopes: list[tuple[int, ...]]) -> Popup | None:

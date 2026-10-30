@@ -17,7 +17,8 @@ Uses your installed Google Chrome (no `playwright install` needed).
 .venv/Scripts/python -m autobonk            # or: .venv/Scripts/autobonk
 ```
 
-Or double-click `run.bat`: it opens the card weight editor (`python -m autobonk.editor`, http://localhost:8080)
+Or double-click `run.bat`: it opens the weight editor (`python -m autobonk.editor`, http://localhost:8080;
+card weights at `/`, map target weights at `/targets`)
 in its own window, waits for a keypress so you can save your weights, then starts the bot.
 
 Opens Chrome on https://pokebonk.com/ at a 1600×900 viewport with its own profile in `profile/`.

@@ -1,6 +1,7 @@
 import json
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import HTTPServer
 from pathlib import Path
@@ -12,6 +13,7 @@ from autobonk.editor import (
     make_handler,
     read_config_weights,
     save_config_weights,
+    save_target_weights,
 )
 
 
@@ -205,6 +207,53 @@ def test_save_refuses_cross_origin_requests(tmp_path: Path):
         assert post({"Content-Type": "application/json", "Host": f"evil.example:{port}"}) == 403
         assert '"月之石" = 10' in toml_path.read_text(encoding="utf-8")
         assert post({"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"}) == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_target_weights_are_saved_apart_from_card_weights(tmp_path: Path):
+    toml_path = tmp_path / "autobonk.toml"
+    toml_path.write_text(
+        '[bot]\nstuck_s = 2.5\n\n[targets.weights]\n"符文祭坛" = 10\n\n[cards.weights]\n"月之石" = 10\n',
+        encoding="utf-8",
+    )
+
+    save_target_weights(toml_path, {"符文祭坛": 10, "精灵球": 5})
+    save_config_weights(toml_path, {"月之石": 9}, ["普通"])
+
+    cfg = load_config(toml_path)
+    assert cfg.targets == {"符文祭坛": 10, "精灵球": 5}
+    assert cfg.cards.weights == {"月之石": 9}
+    assert cfg.stuck_s == 2.5
+
+
+def test_targets_page_lists_every_icon_with_its_image_and_saves(tmp_path: Path):
+    toml_path = tmp_path / "autobonk.toml"
+    toml_path.write_text('[cards.weights]\n"月之石" = 10\n', encoding="utf-8")
+    server, port = serve(toml_path)
+    base = f"http://127.0.0.1:{port}"
+
+    try:
+        with urllib.request.urlopen(f"{base}/targets") as resp:
+            assert "PokéBonk 地图目标" in resp.read().decode("utf-8")
+        with urllib.request.urlopen(f"{base}/api/targets") as resp:
+            icons = [icon for group in json.loads(resp.read())["groups"] for icon in group["icons"]]
+        assert {"name": "符文祭坛", "weight": 10} in icons
+        assert {"name": "喵喵", "weight": 0} in icons
+        for icon in icons:
+            with urllib.request.urlopen(f"{base}/icons/{urllib.parse.quote(icon['name'])}") as resp:
+                assert resp.headers["Content-Type"] == "image/png"
+
+        req = urllib.request.Request(
+            f"{base}/api/targets",
+            data=json.dumps({"weights": {"精灵球": 5}}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req) as resp:
+            assert json.loads(resp.read())["status"] == "ok"
+        assert load_config(toml_path).targets == {"精灵球": 5}
+        assert load_config(toml_path).cards.weights == {"月之石": 10}
     finally:
         server.shutdown()
         server.server_close()

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PokéBonk 地图目标</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #1b1e2e;
+      --panel: #232739;
+      --panel-2: #2b3046;
+      --line: #353b55;
+      --ink: #e9ecf5;
+      --muted: #9097b0;
+      --faint: #6a7190;
+      --accent: #6f93ff;
+      --w-high: #f2c14e;
+      --w-pos: #3cc5a8;
+      --w-zero: #6a7190;
+      --w-neg: #ef5b5b;
+      --num: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
+      --sans: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: dark; }
+    body { font: 14px/1.5 var(--sans); background: var(--bg); color: var(--ink); min-height: 100vh; }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; gap: 16px; padding: 10px 20px;
+      background: rgba(27, 30, 46, 0.92); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar h1 { font: 600 17px/1.2 var(--num); white-space: nowrap; }
+    .topbar .path { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .spacer { flex: 1; }
+    .sync { font-size: 13px; color: var(--muted); white-space: nowrap; }
+    .sync.dirty { color: var(--w-high); }
+    .btn { border: 1px solid var(--line); background: var(--panel-2); padding: 6px 14px; border-radius: 8px; font-size: 13px; text-decoration: none; white-space: nowrap; }
+    .btn:hover { border-color: var(--faint); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d1430; font-weight: 600; }
+    .btn-primary.dirty { background: var(--w-high); border-color: var(--w-high); color: #2a1f00; }
+    kbd { font: 11px var(--num); opacity: 0.7; margin-left: 6px; }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+    .intro { color: var(--muted); font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .intro b { color: var(--ink); }
+    h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+
+    .icon {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 12px 10px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
+    }
+    .icon img { width: 56px; height: 56px; image-rendering: pixelated; border-radius: 50%; border: 3px solid var(--w-zero); background: #fff; }
+    .icon .name { font-weight: 600; }
+    .icon.off { opacity: 0.55; }
+    .icon.off:hover, .icon.off:focus-within { opacity: 1; }
+    .icon.on img { border-color: var(--w-pos); }
+    .icon.high img { border-color: var(--w-high); }
+    .stepper { display: flex; align-items: center; gap: 4px; }
+    .stepper button { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); }
+    .stepper button:hover { border-color: var(--faint); }
+    .stepper input {
+      width: 52px; height: 28px; text-align: center; border-radius: 6px; border: 1px solid var(--line);
+      background: var(--bg); font: 600 15px var(--num); font-variant-numeric: tabular-nums;
+    }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .toast.error { border-color: var(--w-neg); color: var(--w-neg); }
+
+    @media (max-width: 640px) {
+      .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+      .topbar .path { display: none; }
+      main { padding: 16px; }
+      .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1>PokéBonk 地图目标</h1>
+    <span class="path" id="configPath"></span>
+    <span class="spacer"></span>
+    <a class="btn" href="/">← 卡牌权重</a>
+    <span class="sync" id="syncState">已同步</span>
+    <button class="btn btn-primary" id="saveBtn">保存<kbd>Ctrl S</kbd></button>
+  </header>
+
+  <main>
+    <p class="intro">
+      机器人在小地图（找不到时按住 Tab 看大地图）上寻找这些图标。<b>权重高的先去，同权重先去近的；0 = 不去。</b>
+      到了祭坛会站在圈里等充能；到了其他目标按 <b>E</b>，按了没反应（比如钱不够）就先跳过这类目标一段时间。
+      每多选一种图标，每一步约多花 15 毫秒识别，只选需要的。
+      <span id="summary"></span>
+    </p>
+    <div id="groups"></div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    let groups = [];
+    let dirty = false;
+
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    async function init() {
+      try {
+        const res = await fetch('/api/targets');
+        const data = await res.json();
+        groups = data.groups;
+        document.getElementById('configPath').textContent = data.config_path;
+        render();
+      } catch (err) {
+        toast('读取失败：' + err, true);
+      }
+    }
+
+    function render() {
+      document.getElementById('groups').innerHTML = groups.map((g, gi) => `
+        <section style="margin-bottom:20px">
+          <h2>${esc(g.title)}</h2>
+          <div class="grid">${g.icons.map((icon, ii) => `
+            <div class="icon ${cls(icon.weight)}" data-g="${gi}" data-i="${ii}">
+              <img src="/icons/${encodeURIComponent(icon.name)}" alt="">
+              <span class="name">${esc(icon.name)}</span>
+              <div class="stepper">
+                <button type="button" data-step="-1" aria-label="${esc(icon.name)} 权重减 1">−</button>
+                <input type="number" step="1" min="0" value="${icon.weight}" aria-label="${esc(icon.name)} 权重">
+                <button type="button" data-step="1" aria-label="${esc(icon.name)} 权重加 1">+</button>
+              </div>
+            </div>`).join('')}
+          </div>
+        </section>`).join('');
+      summary();
+    }
+
+    function cls(w) { return w >= 8 ? 'on high' : w > 0 ? 'on' : 'off'; }
+
+    function summary() {
+      const on = groups.flatMap((g) => g.icons).filter((i) => i.weight > 0).length;
+      document.getElementById('summary').textContent = `当前会去 ${on} 种目标。`;
+    }
+
+    function setWeight(card, value) {
+      const icon = groups[card.dataset.g].icons[card.dataset.i];
+      icon.weight = Math.max(0, Number.isFinite(value) ? value : 0);
+      card.className = 'icon ' + cls(icon.weight);
+      card.querySelector('input').value = icon.weight;
+      summary();
+      markDirty(true);
+    }
+
+    document.getElementById('groups').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-step]');
+      if (!btn) return;
+      const card = btn.closest('.icon');
+      setWeight(card, Number(card.querySelector('input').value) + Number(btn.dataset.step));
+    });
+    document.getElementById('groups').addEventListener('change', (e) => {
+      if (e.target.matches('input')) setWeight(e.target.closest('.icon'), Number(e.target.value));
+    });
+
+    function markDirty(on) {
+      dirty = on;
+      const state = document.getElementById('syncState');
+      state.textContent = on ? '未保存' : '已同步';
+      state.classList.toggle('dirty', on);
+      document.getElementById('saveBtn').classList.toggle('dirty', on);
+    }
+
+    async function save() {
+      const weights = {};
+      for (const icon of groups.flatMap((g) => g.icons)) if (icon.weight > 0) weights[icon.name] = icon.weight;
+      try {
+        const res = await fetch('/api/targets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weights }),
+        });
+        const data = await res.json();
+        if (data.status !== 'ok') throw new Error(data.error);
+        markDirty(false);
+        toast('已保存。重新启动机器人后生效。');
+      } catch (err) {
+        toast('保存失败：' + err.message, true);
+      }
+    }
+
+    function toast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => (t.className = 'toast'), 2600);
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', save);
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+    });
+    window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+    init();
+  </script>
+</body>
+</html>

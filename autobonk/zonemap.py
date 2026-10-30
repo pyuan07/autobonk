@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from autobonk.icons import find_targets
 from autobonk.minimap import ALTAR_MATCH, ALTAR_TEMPLATE, find_icons, load_rgb
 
 BORDER = (28, 709)  # the dashed zone border, in canvas pixels
@@ -23,9 +24,11 @@ Position = tuple[float, float]
 class ZoneMap:
     player: Position
     altars: tuple[Position, ...]  # discovered rune altars
+    targets: tuple[tuple[str, Position], ...] = ()  # other icons asked for, by name
 
 
-def read_zonemap(png: bytes) -> ZoneMap | None:
+def read_zonemap(png: bytes, targets: tuple[str, ...] = ()) -> ZoneMap | None:
+    """`targets`: names of icons (autobonk.icons) to look for besides altars, each ~13 ms."""
     if not png:
         return None
     image = load_rgb(png)
@@ -33,7 +36,8 @@ def read_zonemap(png: bytes) -> ZoneMap | None:
     if player is None:
         return None
     altars = tuple(_position(x, y) for x, y in find_icons(image, ALTAR_TEMPLATE, ALTAR_MATCH, ICON_STEP))
-    return ZoneMap(player, altars)
+    found = tuple((name, _position(x, y)) for name, (x, y) in find_targets(image, list(targets)))
+    return ZoneMap(player, altars, found)
 
 
 def _player(image: np.ndarray) -> Position | None:

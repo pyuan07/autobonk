@@ -24,14 +24,21 @@ steps_per_second = 10
 unknown_screen_pause_s = 5
 # During play, jump (Space) after a random wait in this range, in seconds.
 jump_interval_s = [0.8, 1.4]
-# Stand in a rune altar's ring at most this long while it charges, then explore elsewhere
-# for altar_ignore_s before coming back. Sealed altars (封印中) are left until they wake.
+# Stand in a rune altar's ring at most this long while it charges, then explore elsewhere.
+# Sealed altars (封印中) are left until they wake.
 altar_charge_cap_s = 45
-altar_ignore_s = 60
+# A target left at the charge cap, or where E did nothing (not enough money), is skipped this long.
+target_ignore_s = 60
 # Walking with no progress toward the target for this long counts as stuck:
 # step left (next time right) for sidestep_s, then walk on.
 stuck_s = 2.5
 sidestep_s = 0.6
+
+[targets.weights]
+# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes first, then the nearest;
+# 0 or unlisted = never. At an altar the bot stands in the ring; at anything else it presses E.
+# Each icon listed costs ~15 ms per step to look for, so list only the ones you want.
+"符文祭坛" = 10
 
 [record]
 # While the bot is paused (you are playing), every popup pick you make is appended here,
