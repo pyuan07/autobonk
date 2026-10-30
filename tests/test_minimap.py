@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from autobonk.minimap import find_altars
+from autobonk.minimap import find_altars, north_bearing
 
 FRAMES = Path(__file__).parent.parent / "fixtures" / "frames"
 
@@ -39,3 +39,24 @@ def test_no_altar_no_match(name):
 
 def test_no_minimap_no_altars():
     assert find_altars(b"") == []
+
+
+# Where 北 sits on the minimap rim, in degrees clockwise from minimap-up.
+@pytest.mark.parametrize(
+    "name, bearing",
+    [
+        ("155200-971", 0),
+        ("155313-554", -17),
+        ("155439-910", 170),
+        ("155532-914", 55),
+        ("155644-630", 84),
+        ("155925-987", -79),
+        ("170001-415", 74),
+    ],
+)
+def test_north_bearing_from_the_rim_marker(name, bearing):
+    assert abs(north_bearing(minimap(name)) - bearing) <= 5
+
+
+def test_no_minimap_no_north():
+    assert north_bearing(b"") is None

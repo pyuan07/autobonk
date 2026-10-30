@@ -7,7 +7,8 @@ from typing import Literal
 
 from autobonk.cards import Card
 from autobonk.frames import Frame
-from autobonk.minimap import Point, find_altars
+from autobonk.minimap import Point, find_altars, north_bearing
+from autobonk.zonemap import ZoneMap, read_zonemap
 
 EndScreen = Literal["win", "lose"]
 
@@ -16,6 +17,7 @@ COUNTDOWN = re.compile(r"\d{1,2}:\d{2}")
 CARD_KEY = re.compile(r"\[(\d)\]")
 # The progress bubble over a rune altar (or ore pile) the player stands in: a bare "29%".
 CHARGE = re.compile(r"\d{1,3}%")
+ZONE = re.compile(r"区域 \d+/\d+")
 # The "还有 N 个图像未加载 [重试]" corner notice is not a popup.
 IGNORED_BUTTONS = {"重试"}
 # Buttons that close a popup without choosing anything.
@@ -42,6 +44,9 @@ class Observation:
     popup: Popup | None = None
     altars: tuple[Point, ...] = ()  # rune altars on the minimap, nearest first
     charging: bool = False  # a progress bubble shows: stay put until it finishes
+    north: float | None = None  # 北 on the minimap rim, degrees clockwise from minimap-up
+    zonemap: ZoneMap | None = None  # only while Tab is held
+    zone: str | None = None  # "区域 1/3"
 
     @property
     def recognised(self) -> bool:
@@ -56,7 +61,11 @@ def perceive(frame: Frame) -> Observation:
     countdown = next((t for t in texts if COUNTDOWN.fullmatch(t)), None)
     altars = tuple(sorted(find_altars(frame.minimap), key=lambda p: p[0] ** 2 + p[1] ** 2))
     charging = any(tag == "span" and CHARGE.fullmatch(text) for tag, text in nodes)
-    return Observation(end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging)
+    zone = next((t for t in texts if ZONE.fullmatch(t)), None)
+    return Observation(
+        end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
+        north_bearing(frame.minimap), read_zonemap(frame.zonemap), zone,
+    )
 
 
 def _popup(nodes: list[tuple[str, str]], scopes: list[tuple[int, ...]]) -> Popup | None:

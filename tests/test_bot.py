@@ -180,7 +180,7 @@ def test_money_and_fusion_popups_are_left(name, leave):
     ],
 )
 def test_banners_and_notices_are_not_popups(name):
-    assert Bot().step(recorded(name)) == []
+    assert perceive(recorded(name)).popup is None
 
 
 @pytest.mark.parametrize(
@@ -289,3 +289,50 @@ def test_no_jumping_in_popups():
     bot.step(run_frame("155313-554", 100.0))  # 稀有未知图腾祭坛 reward popup is open in this frame
 
     assert Press("Space") not in bot.step(run_frame("155313-554", 101.0))
+
+
+def with_maps(name: str, minimap_of: str, zonemap: bytes = b"", timestamp: float = 100.0) -> Frame:
+    """Frame `name` with the minimap of another frame and (Tab held) a zone map."""
+    frame = run_frame(name, timestamp)
+    return replace(frame, minimap=run_frame(minimap_of, 0).minimap, zonemap=zonemap)
+
+
+ZONEMAP = (FRAMES / "frame-20261030-170001-415.zonemap.png").read_bytes()  # altar west of the player
+
+
+def zonemap_without_altars() -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    image = Image.open(BytesIO(ZONEMAP))
+    image.paste(image.crop((500, 480, 560, 540)), (247, 292))  # grass over the altar at (277, 322)
+    out = BytesIO()
+    image.save(out, "PNG")
+    return out.getvalue()
+
+
+def test_nothing_on_the_minimap_holds_tab_to_read_the_zone_map():
+    assert holds(Bot().step(run_frame("155925-987", 100.0))) == [Hold(frozenset({"Tab"}))]
+
+
+def test_heads_for_an_altar_seen_on_the_zone_map_correcting_for_the_camera():
+    # Zone map: altar to the west-north-west (bearing -71). Minimap: 北 at -79, so it shows at -150: down-left.
+    frame = with_maps("155925-987", minimap_of="155925-987", zonemap=ZONEMAP)
+
+    assert holds(Bot().step(frame)) == [Hold(frozenset({"Tab", "KeyS", "KeyA"}))]
+
+
+def test_with_nothing_discovered_heads_for_the_nearest_unvisited_cell():
+    # Player in cell (3, 3) of 8x8, near its east side: cell (4, 3) is nearest, bearing ~67.
+    # Minimap 北 at -79, so it shows at ~-12: up.
+    frame = with_maps("155925-987", minimap_of="155925-987", zonemap=zonemap_without_altars())
+
+    assert holds(Bot().step(frame)) == [Hold(frozenset({"Tab", "KeyW"}))]
+
+
+def test_an_altar_on_the_minimap_takes_over_and_lets_go_of_tab():
+    bot = Bot()
+    bot.step(with_maps("155925-987", minimap_of="155925-987", zonemap=ZONEMAP))
+
+    assert holds(bot.step(run_frame("170001-415", 100.1))) == [Hold(frozenset({"KeyW"}))]

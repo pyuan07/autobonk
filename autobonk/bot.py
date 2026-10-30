@@ -9,6 +9,7 @@ from typing import Protocol
 from autobonk.cards import CardPrefs
 from autobonk.frames import Frame
 from autobonk.perception import LEAVE_BUTTONS, Observation, Popup, perceive
+from autobonk.zonemap import Position
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,8 @@ DIRECTION_KEYS = (
 )
 # Closer than this (minimap pixels) the player is in the altar's ring: stop walking.
 ALTAR_ARRIVED_PX = 14
+MAP_KEY = "Tab"  # held while exploring: the zone map shows, the game keeps running
+GRID = 8  # the zone is explored as GRID x GRID cells; edge cells are never targets
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,9 @@ class Bot:
         self._next_jump: float | None = None
         self._charging_since: float | None = None
         self._altars_ignored = False  # an altar outlasted the charge cap; ignored until its bubble goes
+        self._zone: str | None = None
+        self._visited: set[tuple[int, int]] = set()  # zone-map cells the player has been in
+        self._heading: float | None = None  # exploring toward this compass bearing (north-up)
         self._unrecognised_since: float | None = None
         self._last_state: str | None = None
         self._answered: tuple[str, float] | None = None  # (popup title, when)
@@ -137,15 +143,45 @@ class Bot:
         keys: frozenset[str] = frozenset()
         if self._altars_ignored:
             keys = self._held
-        elif observation.altars and not observation.charging:
+        elif observation.charging:
+            pass
+        elif observation.altars:
             x, y = observation.altars[0]
             if math.hypot(x, y) > ALTAR_ARRIVED_PX:
-                sector = round(math.degrees(math.atan2(-y, x)) / 45) % 8
-                keys = frozenset(DIRECTION_KEYS[sector])
+                keys = _direction(math.degrees(math.atan2(x, -y)))
+        else:
+            keys = self._explore(observation)
         if keys == self._held:
             return []
         self._held = keys
         return [Hold(keys)]
+
+    def _explore(self, observation: Observation) -> frozenset[str]:
+        """Nothing on the minimap: hold Tab and head for a discovered altar on the zone map,
+        else the nearest unvisited cell, turning the north-up bearing into minimap-up WASD."""
+        if observation.zone != self._zone:
+            self._zone, self._visited, self._heading = observation.zone, set(), None
+        zone = observation.zonemap
+        if zone:
+            self._visited.add(_cell(zone.player))
+            target = min(zone.altars, key=lambda a: _distance(zone.player, a), default=None)
+            if target is None:
+                target = self._nearest_unvisited(zone.player)
+            dx, dy = target[0] - zone.player[0], target[1] - zone.player[1]
+            self._heading = math.degrees(math.atan2(dx, -dy))
+        if self._heading is None or observation.north is None:
+            return frozenset({MAP_KEY})
+        return _direction(observation.north + self._heading) | {MAP_KEY}
+
+    def _nearest_unvisited(self, player: Position) -> Position:
+        inner = [(col, row) for col in range(1, GRID - 1) for row in range(1, GRID - 1)]
+        unvisited = [cell for cell in inner if cell not in self._visited]
+        if not unvisited:
+            log.info("whole zone explored: starting over")
+            self._visited = {_cell(player)}
+            unvisited = [cell for cell in inner if cell not in self._visited]
+        centres = [((col + 0.5) / GRID, (row + 0.5) / GRID) for col, row in unvisited]
+        return min(centres, key=lambda centre: _distance(player, centre))
 
     def _jump(self, now: float) -> list[Command]:
         if self._next_jump is None:
@@ -195,6 +231,19 @@ class Bot:
         if state != self._last_state:
             log.info("state: %s%s", state, f" (countdown {observation.countdown})" if observation.countdown else "")
             self._last_state = state
+
+
+def _direction(bearing: float) -> frozenset[str]:
+    """WASD for a minimap bearing (degrees clockwise from minimap-up), to the nearest 45 degrees."""
+    return frozenset(DIRECTION_KEYS[round((90 - bearing) / 45) % 8])
+
+
+def _cell(position: Position) -> tuple[int, int]:
+    return min(int(position[0] * GRID), GRID - 1), min(int(position[1] * GRID), GRID - 1)
+
+
+def _distance(a: Position, b: Position) -> float:
+    return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
 def _key(cap: str) -> str:

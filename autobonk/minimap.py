@@ -5,6 +5,7 @@ Red dots are enemies, yellow dots elites.
 """
 
 import io
+import math
 from functools import cache
 from pathlib import Path
 
@@ -16,6 +17,10 @@ ALTAR_TEMPLATE = Path(__file__).parent / "altar_crystal.png"
 # Normalised cross-correlation: clear altars score >= 0.84, ones under the player arrow ~0.56,
 # every other icon <= 0.40.
 ALTAR_MATCH = 0.5
+# The 北 badge on the rim (red glyph; 南/东/西 are white and score ~0.45).
+NORTH_TEMPLATE = Path(__file__).parent / "north_marker.png"
+NORTH_MATCH = 0.7
+RIM = (160, 200)  # the rim markers' distance from the centre, in minimap pixels
 CENTRE = 200
 
 Point = tuple[int, int]  # offset from the player, x right and y down, in minimap pixels
@@ -24,22 +29,48 @@ Point = tuple[int, int]  # offset from the player, x right and y down, in minima
 def find_altars(png: bytes) -> list[Point]:
     if not png:
         return []
-    image = np.asarray(Image.open(io.BytesIO(png)).convert("RGB"), dtype=np.float64)
-    template = _altar_template()
-    scores = _match(image, template)
+    return [(x - CENTRE, y - CENTRE) for x, y in find_icons(load_rgb(png), ALTAR_TEMPLATE, ALTAR_MATCH)]
+
+
+def north_bearing(png: bytes) -> float | None:
+    """Where 北 sits on the rim, in degrees clockwise from minimap-up (W). A north-up compass
+    bearing b then shows on the minimap at bearing `north + b`."""
+    if not png:
+        return None
+    template = _template(NORTH_TEMPLATE)
+    scores = _match(load_rgb(png), template)
+    half = template.shape[0] // 2
+    ys, xs = np.mgrid[: scores.shape[0], : scores.shape[1]]
+    distance = np.hypot(xs + half - CENTRE, ys + half - CENTRE)
+    scores[(distance < RIM[0]) | (distance > RIM[1])] = -1
+    y, x = np.unravel_index(scores.argmax(), scores.shape)
+    if scores[y, x] < NORTH_MATCH:
+        return None
+    return math.degrees(math.atan2(x + half - CENTRE, CENTRE - (y + half)))
+
+
+def load_rgb(png: bytes) -> np.ndarray:
+    return np.asarray(Image.open(io.BytesIO(png)).convert("RGB"), dtype=np.float32)
+
+
+def find_icons(image: np.ndarray, template_path: Path, threshold: float, step: int = 1) -> list[tuple[int, int]]:
+    """Centres of every match of the template scoring at least `threshold`, best first.
+    `step` > 1 matches on every step-th pixel of both: faster, lower scores."""
+    template = _template(template_path)[::step, ::step]
+    scores = _match(image[::step, ::step], template)
     size = template.shape[0]
-    altars: list[Point] = []
+    found: list[tuple[int, int]] = []
     while True:
         y, x = np.unravel_index(scores.argmax(), scores.shape)
-        if scores[y, x] < ALTAR_MATCH:
-            return altars
-        altars.append((int(x) + size // 2 - CENTRE, int(y) + size // 2 - CENTRE))
+        if scores[y, x] < threshold:
+            return found
+        found.append(((int(x) + size // 2) * step, (int(y) + size // 2) * step))
         scores[max(0, y - size):y + size, max(0, x - size):x + size] = -1
 
 
 @cache
-def _altar_template() -> np.ndarray:
-    return np.asarray(Image.open(ALTAR_TEMPLATE).convert("RGB"), dtype=np.float64)
+def _template(path: Path) -> np.ndarray:
+    return np.asarray(Image.open(path).convert("RGB"), dtype=np.float32)
 
 
 def _match(image: np.ndarray, template: np.ndarray) -> np.ndarray:
@@ -58,7 +89,8 @@ def _match(image: np.ndarray, template: np.ndarray) -> np.ndarray:
     )[: height - h + 1, : width - w + 1]
 
     def window_sums(values: np.ndarray) -> np.ndarray:
-        s = np.pad(values.cumsum(0).cumsum(1), ((1, 0), (1, 0)))
+        # float64: running sums of squares reach ~1e11, beyond float32's precision.
+        s = np.pad(values.cumsum(0, dtype=np.float64).cumsum(1), ((1, 0), (1, 0)))
         return s[h:, w:] - s[:-h, w:] - s[h:, :-w] + s[:-h, :-w]
 
     mean = sum(window_sums(image[..., c]) for c in range(3)) / n
