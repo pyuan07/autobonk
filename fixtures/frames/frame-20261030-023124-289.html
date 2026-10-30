@@ -1,0 +1,161 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light" data-lang="zh" class="calm-fx" data-theme-pref="auto"><head>
+    <meta name="pokebonk-build" content="mvtvh36e">
+    <script data-pb-recovery="">// Inlined before the module entry by Vite: it must work even when that entry cannot load.
+(() => {
+  const build = document.querySelector('meta[name="pokebonk-build"]')?.content || 'unknown';
+  const texts = {"es":"Reintentar","en":"Retry","pt":"Tentar de novo","fr":"Réessayer","ja":"再試行","zh":"重试","zht":"重試","ko":"다시 시도","ru":"Повторить"};
+  const tag = document.documentElement.lang.toLowerCase();
+  const lang = tag === 'zh-hant' ? 'zht' : tag.split('-')[0];
+  const retryText = texts[lang] || texts.en;
+  let ready = false, recovering = false;
+  const urls = new Set();
+  const remember = (value) => {
+    try {
+      const url = new URL(value, location.href);
+      if (url.origin === location.origin && /\/assets\/.*\.(js|css)(\?.*)?$/.test(url.pathname + url.search)) urls.add(url.href);
+    } catch { /* An error without a resource URL. */ }
+  };
+  const navigate = () => {
+    const url = new URL(location.href);
+    url.searchParams.set('pb-reload', String(Date.now()));
+    location.replace(url.href);
+  };
+  const showRetry = () => {
+    if (document.getElementById('boot-retry')) return;
+    const card = document.createElement('div');
+    card.id = 'boot-retry';
+    card.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#1a1630;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;font:700 24px system-ui;text-align:center';
+    const title = document.createElement('strong'); title.textContent = 'PokéBonk';
+    const btn = document.createElement('button'); btn.textContent = retryText;
+    btn.style.cssText = 'padding:14px 32px;border:0;border-radius:28px;background:#e94756;color:white;font:700 18px system-ui;cursor:pointer';
+    btn.onclick = () => { void refresh().finally(navigate); };
+    card.append(title, btn);
+    (document.body || document.documentElement).append(card);
+  };
+  const refresh = async () => {
+    document.querySelectorAll('script[type="module"][src],link[rel="stylesheet"][href],link[rel="modulepreload"][href]').forEach((el) => remember(el.src || el.href));
+    // cache:reload replaces a bad HTTP cache entry without clearing accounts or pending runs.
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+    try { await Promise.allSettled([...urls].map((url) => fetch(url, { cache: 'reload', signal: ctl.signal }))); }
+    finally { clearTimeout(timer); }
+  };
+  const recover = async () => {
+    if (ready || recovering) return;
+    recovering = true;
+    showRetry();
+    let once = false;
+    try {
+      const key = 'pb.bootRetry.' + build;
+      once = sessionStorage.getItem(key) !== '1';
+      sessionStorage.setItem(key, '1');
+    } catch { /* Storage unavailable: offer the button, do not risk a reload loop. */ }
+    if (once) { try { await refresh(); } finally { navigate(); } }
+  };
+  addEventListener('error', (event) => {
+    const target = event.target;
+    if (target?.tagName === 'SCRIPT' && target.type === 'module' || target?.tagName === 'LINK' && ['stylesheet', 'modulepreload'].includes(target.rel)) {
+      remember(target.src || target.href); void recover();
+    } else if (event.filename) {
+      remember(event.filename);
+      if (urls.size) void recover();
+    }
+  }, true);
+  addEventListener('vite:preloadError', (event) => {
+    if (ready) return;
+    // Let boot.ts catch the rejection; suppressing it would falsely mark a missing module as ready.
+    const message = String(event.payload?.message || '');
+    for (const url of message.match(/https?:\/\/[^\s"'<>]+/g) || []) remember(url);
+    void recover();
+  });
+  addEventListener('pokebonk:boot-failed', () => { void recover(); });
+  addEventListener('pokebonk:modules-ready', () => { ready = true; document.getElementById('boot-retry')?.remove(); });
+  // A stalled download/font/GPU initialization must still leave a usable action, without auto-reloading slow links.
+  setTimeout(() => { if (!ready) showRetry(); }, 45000);
+})();
+</script>
+
+    <meta charset="UTF-8">
+    <!-- On touch screens core/touch.ts rewrites the viewport (landscape phones get a wider virtual one). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#1a1630">
+    <!-- Light by default (dark is opt-in: Ajustes → Tema, see the script below and ui/theme.ts; meta values flip to «dark» then). «only light» stops the forced dark mode of Chrome Android, vivo, Samsung and QQ from inverting colours (reports 6292, 6173, 7280). -->
+    <meta name="color-scheme" content="only light">
+    <meta name="supported-color-schemes" content="light">
+    <meta name="darkreader-lock">
+    <!-- Theme before the first paint (no white flash): same rule as src/ui/theme.ts. Saved choice, else the system's. -->
+    <script>
+      (function () {
+        try {
+          var p = localStorage.getItem('pokebonk.theme');
+          var d = p === 'dark' || (p !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+          var r = document.documentElement;
+          r.setAttribute('data-theme', d ? 'dark' : 'light');
+          if (d) {
+            document.querySelector('meta[name="color-scheme"]').setAttribute('content', 'dark');
+            document.querySelector('meta[name="supported-color-schemes"]').setAttribute('content', 'dark');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0f1320');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <!-- Title, description, canonical, hreflang, Open Graph, Twitter and JSON-LD come from src/seo.ts (vite.config.ts). -->
+    <title>PokéBonk｜浏览器免费畅玩的3D宝可梦幸存者游戏</title>
+    <meta name="description" content="在浏览器中免费畅玩的3D幸存者游戏，登场关都地区全部151只宝可梦：在野生宝可梦群中生存、进化、释放终极技并解锁联盟。非官方同人游戏。">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://pokebonk.com/">
+    <link rel="alternate" hreflang="es" href="https://pokebonk.com/?lang=es">
+    <link rel="alternate" hreflang="en" href="https://pokebonk.com/?lang=en">
+    <link rel="alternate" hreflang="pt" href="https://pokebonk.com/?lang=pt">
+    <link rel="alternate" hreflang="fr" href="https://pokebonk.com/?lang=fr">
+    <link rel="alternate" hreflang="ja" href="https://pokebonk.com/?lang=ja">
+    <link rel="alternate" hreflang="zh-CN" href="https://pokebonk.com/?lang=zh">
+    <link rel="alternate" hreflang="zh-TW" href="https://pokebonk.com/?lang=zht">
+    <link rel="alternate" hreflang="ko" href="https://pokebonk.com/?lang=ko">
+    <link rel="alternate" hreflang="ru" href="https://pokebonk.com/?lang=ru">
+    <link rel="alternate" hreflang="x-default" href="https://pokebonk.com/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="PokéBonk">
+    <meta property="og:title" content="PokéBonk · Survivor 3D de Pokémon gratis en el navegador">
+    <meta property="og:description" content="Survivor 3D gratis en el navegador con los 151 Pokémon de Kanto: sobrevive a hordas salvajes, evoluciona, lanza tu Ultimate y desbloquea la Liga. Fan-game no oficial.">
+    <meta property="og:url" content="https://pokebonk.com/">
+    <meta property="og:image" content="https://pokebonk.com/social/card-es.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="PokéBonk: un bosque de mesetas con una Poké Ball en un altar. Survivor 3D gratis en el navegador.">
+    <meta property="og:locale" content="es_ES">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="pt_BR">
+    <meta property="og:locale:alternate" content="fr_FR">
+    <meta property="og:locale:alternate" content="ja_JP">
+    <meta property="og:locale:alternate" content="zh_CN">
+    <meta property="og:locale:alternate" content="zh_TW">
+    <meta property="og:locale:alternate" content="ko_KR">
+    <meta property="og:locale:alternate" content="ru_RU">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="PokéBonk · Survivor 3D de Pokémon gratis en el navegador">
+    <meta name="twitter:description" content="Survivor 3D gratis en el navegador con los 151 Pokémon de Kanto: sobrevive a hordas salvajes, evoluciona, lanza tu Ultimate y desbloquea la Liga. Fan-game no oficial.">
+    <meta name="twitter:image" content="https://pokebonk.com/social/card-es.jpg">
+    <meta name="twitter:image:alt" content="PokéBonk: un bosque de mesetas con una Poké Ball en un altar. Survivor 3D gratis en el navegador.">
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://pokebonk.com/#website","name":"PokéBonk","url":"https://pokebonk.com/","inLanguage":["es","en","pt","fr","ja","zh-CN","zh-TW","ko","ru"]},{"@type":["VideoGame","WebApplication"],"@id":"https://pokebonk.com/#game","name":"PokéBonk","url":"https://pokebonk.com/","description":"Survivor 3D gratis en el navegador con los 151 Pokémon de Kanto: sobrevive a hordas salvajes, evoluciona, lanza tu Ultimate y desbloquea la Liga. Fan-game no oficial.","image":"https://pokebonk.com/social/card-es.jpg","inLanguage":"es","isPartOf":{"@id":"https://pokebonk.com/#website"},"genre":["Survivor","Roguelite","Action"],"gamePlatform":"Web browser","playMode":"SinglePlayer","applicationCategory":"GameApplication","operatingSystem":"Any (WebGL)","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"sameAs":["https://discord.gg/X7KusQqx8X"]}]}</script>
+    <meta name="application-name" content="PokéBonk">
+    <meta name="apple-mobile-web-app-title" content="PokéBonk">
+    <link rel="icon" href="./favicon.ico" sizes="48x48">
+    <link rel="icon" href="./icons/favicon-96.png" type="image/png" sizes="96x96">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+    <script type="module" crossorigin="" src="./assets/main-ClFlxKvW-mvtvh36e.js"></script>
+    <link rel="modulepreload" crossorigin="" href="./assets/modulepreload-polyfill-P2Xu9kJm-mvtvh36e.js">
+    <link rel="modulepreload" crossorigin="" href="./assets/i18n-Bjw6RPm7-mvtvh36e.js">
+  <link rel="modulepreload" as="script" crossorigin="" href="https://pokebonk.com/assets/main-DelGpeya-mvtvh36e.js"><link rel="modulepreload" as="script" crossorigin="" href="https://pokebonk.com/assets/defineProperty-Dw1qckdm-mvtvh36e.js"><link rel="stylesheet" crossorigin="" href="https://pokebonk.com/assets/defineProperty-CczbuyYk-mvtvh36e.css"><link rel="modulepreload" as="script" crossorigin="" href="https://pokebonk.com/assets/three-Cqr3IyJd.js"><link rel="stylesheet" crossorigin="" href="https://pokebonk.com/assets/main-BahkvX9N-mvtvh36e.css"><style>img[data-rt]{color:transparent;font-size:0;text-indent:-9999px;overflow:hidden}</style></head>
+  <body>
+    <noscript><main style="max-width:640px;margin:40px auto;padding:0 16px;color:#fff;font:16px/1.5 system-ui,sans-serif"><h1>PokéBonk</h1><p>Survivor 3D gratis en el navegador con los 151 Pokémon de Kanto: sobrevive a hordas salvajes, evoluciona, lanza tu Ultimate y desbloquea la Liga. Fan-game no oficial.</p><p>PokéBonk necesita JavaScript y WebGL para funcionar. Actívalos y recarga la página.</p><p><a href="/?lang=es" hreflang="es">ES</a> · <a href="/?lang=en" hreflang="en">EN</a> · <a href="/?lang=pt" hreflang="pt">PT</a> · <a href="/?lang=fr" hreflang="fr">FR</a> · <a href="/?lang=ja" hreflang="ja">JA</a> · <a href="/?lang=zh" hreflang="zh-CN">ZH</a> · <a href="/?lang=zht" hreflang="zh-TW">ZHT</a> · <a href="/?lang=ko" hreflang="ko">KO</a> · <a href="/?lang=ru" hreflang="ru">RU</a></p><p><a href="https://discord.gg/X7KusQqx8X">Discord</a> · <a href="/legal">Legal</a></p></main></noscript>
+    <canvas id="game" data-engine="three.js r186" width="1600" height="900" style="image-rendering: auto;"></canvas>
+    <div id="ui"><div class="screen dim blur sec dx"><div class="scr-head"><button class="back-btn"><kbd>Esc</kbd>返回</button><div class="scr-title"><h1>图鉴</h1><span>已见过 151/151</span></div><div class="seg dxp-tabs" role="tablist"><button class="pill" role="tab" aria-selected="false">宝可梦</button><button class="pill" role="tab" aria-selected="false">招式</button><button class="pill on" role="tab" aria-selected="true">维生素</button><button class="pill" role="tab" aria-selected="false">道具</button></div><div class="grow"></div><button class="dx-nb dx-hdbtn" title="研究笔记" aria-label="研究笔记"><img class="pix uiicon" src="./assets/ui/icons/research.png?v=W-_3LRzc" alt="" draggable="false" style="width: 28px; height: 28px; vertical-align: middle;"><span class="dx-hdtx"><small>笔记</small><b>77/78</b></span></button><button class="btn small ghost gl-btn dx-hdbtn dx-gloss" title="每项属性、状态和反应的含义"><img class="pix uiicon" src="./assets/ui/icons/research.png?v=W-_3LRzc" alt="" draggable="false" style="width: 18px; height: 18px; vertical-align: middle;"><span class="dx-hdtx">术语表</span></button></div><div style="display: contents;"><div class="dx-main dxp-main"><div class="panel dx-left"><div class="dx-bar"><input class="field dx-search" placeholder="搜索维生素…" aria-label="搜索维生素…"><span class="dx-count">26 种维生素</span></div><div class="dx-grid dxp-list vits scroll"><button class="dxp-item vit on" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/protein.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>攻击增强剂</b><small>物理伤害</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/calcium.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>特攻增强剂</b><small>特殊伤害</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/iron.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>防御增强剂</b><small>护甲</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/zinc.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>特防增强剂</b><small>可再生护盾</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/carbos.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>速度增强剂</b><small>移动速度</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/hp-up.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>ＨＰ增强剂</b><small>最大 HP</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/pp-up.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>ＰＰ提升剂</b><small>弹丸</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/ether.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>ＰＰ单项小补剂</b><small>攻击速度</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/dire-hit.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>命中强化</b><small>暴击率</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/x-speed.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>速度强化</b><small>弹丸速度</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/x-defense.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>防御强化</b><small>闪避</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/x-attack.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>力量强化</b><small>异常状态几率</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/stardust.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>星星沙子</b><small>效果范围</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/elixir.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>ＰＰ多项小补剂</b><small>持续时间</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/super-potion.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>好伤药</b><small>HP 再生</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/nugget.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>金珠</b><small>宝可币</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/rare-candy.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>经验糖果</b><small>经验</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/star-piece.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>星星碎片</b><small>幸运</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/max-potion.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>全满药</b><small>生命偷取</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/escape-rope.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>离洞绳</b><small>拾取范围</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/cleanse-tag.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>诅咒薰香</b><small>敌人更多更强，但每级经验 +6%，₽ +6%</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/sticky-barb.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>附着针</b><small>尖刺</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/enigma-berry.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>谜芝果</b><small>溢出治疗</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/super-lure.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>白银香水</b><small>精英出现</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/poke-radar.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>宝可追踪</b><small>强化道具</small></span></button><button class="dxp-item vit" style="--c: #8a5cff;"><img class="pix dxp-vimg" src="./assets/items/loaded-dice.png?v=mDHJtEFo" alt="" draggable="false"><span class="dxp-tx"><b>机变骰子</b><small>随机属性</small></span></button></div></div><div class="dx-right dxp-right"><div class="panel dx-info dxp-info scroll"><div class="dxp-head" style="--c: #8a5cff;"><img class="pix dxp-vbig" src="./assets/items/protein.png?v=mDHJtEFo" alt="" draggable="false"><div class="grow"><h2>攻击增强剂</h2><small>物理伤害</small></div></div><div class="dxp-plan"><label><small>配置计划对象</small><select class="field dxp-sel" aria-label="计划的宝可梦"><option value="1">妙蛙种子</option><option value="4">小火龙</option><option value="7">杰尼龟</option><option value="10">绿毛虫</option><option value="13">独角虫</option><option value="16">波波</option><option value="19">小拉达</option><option value="21">烈雀</option><option value="23">阿柏蛇</option><option value="25">皮卡丘</option><option value="27">穿山鼠</option><option value="29">尼多兰</option><option value="32">尼多朗</option><option value="35">皮皮</option><option value="37">六尾</option><option value="39">胖丁</option><option value="41">超音蝠</option><option value="43">走路草</option><option value="46">派拉斯</option><option value="48">毛球</option><option value="50">地鼠</option><option value="52">喵喵</option><option value="54">可达鸭</option><option value="56">猴怪</option><option value="58">卡蒂狗</option><option value="60">蚊香蝌蚪</option><option value="63">凯西</option><option value="66">腕力</option><option value="69">喇叭芽</option><option value="72">玛瑙水母</option><option value="74">小拳石</option><option value="77">小火马</option><option value="79">呆呆兽</option><option value="81">小磁怪</option><option value="83">大葱鸭</option><option value="84">嘟嘟</option><option value="86">小海狮</option><option value="88">臭泥</option><option value="90">大舌贝</option><option value="92">鬼斯</option><option value="95">大岩蛇</option><option value="96">催眠貘</option><option value="98">大钳蟹</option><option value="100">霹雳电球</option><option value="102">蛋蛋</option><option value="104">卡拉卡拉</option><option value="106">飞腿郎</option><option value="107">快拳郎</option><option value="108">大舌头</option><option value="109">瓦斯弹</option><option value="111">独角犀牛</option><option value="113">吉利蛋</option><option value="114">蔓藤怪</option><option value="115">袋兽</option><option value="116">墨海马</option><option value="118">角金鱼</option><option value="120">海星星</option><option value="122">魔墙人偶</option><option value="123">飞天螳螂</option><option value="124">迷唇姐</option><option value="125">电击兽</option><option value="126">鸭嘴火兽</option><option value="127">凯罗斯</option><option value="128">肯泰罗</option><option value="129">鲤鱼王</option><option value="131">拉普拉斯</option><option value="132">百变怪</option><option value="133">伊布</option><option value="137">多边兽</option><option value="138">菊石兽</option><option value="140">化石盔</option><option value="142">化石翼龙</option><option value="143">卡比兽</option><option value="144">急冻鸟</option><option value="145">闪电鸟</option><option value="146">火焰鸟</option><option value="147">迷你龙</option><option value="150" selected="selected">超梦</option><option value="151">梦幻</option></select></label><button class="btn small green dxp-planbtn"><span class="bp-star" aria-hidden="true" style="width: 15px; height: 15px;"><svg viewBox="0 0 24 24" width="100%" height="100%"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.6l1.2-6.5L2.5 9.5l6.6-.9z"></path></svg></span>加入计划</button><button class="btn small ghost dxp-edit" title="打开 超梦 的计划并完整编辑">编辑计划</button><small class="dxp-planmax" title="超梦 的计划栏位">计划中 0/5</small></div><section class="dxp-sec"><div class="tag">每级的效果</div><p class="mp-hint">若每次提升都是普通稀有度,该维生素在各等级提供的总量。</p><div class="dxp-levels"><div class="dxp-lv"><small>Lv.1</small><b>+10%</b></div><div class="dxp-lv"><small>Lv.2</small><b>+20%</b></div><div class="dxp-lv"><small>Lv.3</small><b>+30%</b></div><div class="dxp-lv"><small>Lv.4</small><b>+40%</b></div><div class="dxp-lv"><small>Lv.5</small><b>+50%</b></div><div class="dxp-lv"><small>Lv.6</small><b>+60%</b></div><div class="dxp-lv"><small>Lv.7</small><b>+70%</b></div><div class="dxp-lv"><small>Lv.8</small><b>+80%</b></div><div class="dxp-lv"><small>Lv.9</small><b>+90%</b></div><div class="dxp-lv max"><small>Lv.10</small><b>+100%</b></div></div><p class="dxp-note">最高等级:10。 有 ＰＰ单项全补剂 时为 12。</p></section><section class="dxp-sec"><div class="tag">按卡牌稀有度</div><p class="mp-hint">每次提升的数值:卡牌越稀有,提升越多。</p><div class="dxp-rar"><div class="dxp-rar-row" style="--rc: #c8d0dc;"><span>普通</span><b>+10%</b></div><div class="dxp-rar-row" style="--rc: #5ad87a;"><span>少见</span><b>+12%</b></div><div class="dxp-rar-row" style="--rc: #4aa8ff;"><span>稀有</span><b>+14.5%</b></div><div class="dxp-rar-row" style="--rc: #c070ff;"><span>史诗</span><b>+17.5%</b></div><div class="dxp-rar-row" style="--rc: #ffc83a;"><span>传说</span><b>+21%</b></div></div></section><p class="dxp-note">开局时最多同时携带 3 种维生素。</p></div></div></div></div></div></div>
+  <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;4cb4879ca22a4fc0bd0d67b79397aefe&quot;,&quot;r&quot;:1,&quot;spa&quot;:2}" crossorigin="anonymous"></script>
+
+
+<div class="rotate-hint"><div><img class="pix" src="./assets/ui/icons/rotate.png?v=W-_3LRzc" alt=""><b>请旋转你的设备</b><span>PokéBonk 需要横屏游玩</span></div></div></body></html>
