@@ -8,7 +8,15 @@ from typing import Mapping, Protocol, TypeVar
 
 from autobonk.cards import CardPrefs
 from autobonk.frames import Frame
-from autobonk.perception import LEAVE_BUTTONS, Observation, Popup, perceive
+from autobonk.perception import (
+    BANISH_RE,
+    LEAVE_BUTTONS,
+    Observation,
+    Popup,
+    REROLL_RE,
+    SKIP_RE,
+    perceive,
+)
 from autobonk.zonemap import Position
 
 log = logging.getLogger(__name__)
@@ -126,12 +134,18 @@ class Bot:
         movement: Movement | None = None,
         targets: Mapping[str, Weight] | None = None,
         boss: BossRule | None = None,
+        banish_threshold: float | None = -5.0,
+        reroll_threshold: float | None = 0.0,
+        skip_threshold: float | None = 0.0,
     ):
         """`targets`: map icon name -> weight. Targets are scored by weight with a proximity bonus
         (up to movement.distance_factor, default +20%); 0 or less is never visited. `boss`: when to
         summon the area boss (骷髅); None never."""
         self._unknown_screen_pause_s = unknown_screen_pause_s
         self._cards = cards
+        self._banish_threshold = banish_threshold
+        self._reroll_threshold = reroll_threshold
+        self._skip_threshold = skip_threshold
         self._movement = movement or Movement()
         weights = DEFAULT_TARGETS if targets is None else targets
         self._weights = {name: w if isinstance(w, tuple) else (w, w) for name, w in weights.items()}
@@ -155,6 +169,7 @@ class Bot:
         self._next_jump: float | None = None
         self._charging_since: float | None = None
         self._ignored: dict[str, float] = {}  # target name -> skipped until (sealed, charge cap, E did nothing)
+        self._ignored_instances: list[tuple[str, tuple[float, float], float]] = []  # (name, (zx, zy), until)
         self._target: str | None = None  # the kind of target being walked to or stood at
         self._interacted: tuple[str, float, float] | None = None  # (target, started_at, last_pressed_at)
         self._temp_target: tuple[str, tuple[float, float], float] | None = None  # (target, (x, y), when)
@@ -167,7 +182,7 @@ class Bot:
         self._sidestep_left = True
         self._unrecognised_since: float | None = None
         self._last_state: str | None = None
-        self._answered: tuple[str, float] | None = None  # (popup title, when)
+        self._answered: tuple[object, float] | None = None  # (popup state, when)
 
     def step(self, frame: Frame) -> list[Command]:
         observation = perceive(frame, self._icons)
@@ -256,7 +271,7 @@ class Bot:
             zone = observation.zonemap
             self._visited.add(_cell(zone.player))
             zone_targets = [(ALTAR, p) for p in zone.altars] + list(zone.targets)
-            candidates = self._candidates(zone_targets, now)
+            candidates = self._candidates(zone_targets, now, is_zonemap=True)
             target_pos: Position | None = None
             if self._boss_beaten and observation.portal is not None and not self._has_nearby_super_balls(observation, now):
                 self._target = PORTAL
@@ -293,9 +308,9 @@ class Bot:
                         keys = _direction(self._bearing)
                     if distance <= CLOSE_TIMEOUT_PX or prompt_ok or (self._interacted is not None and self._interacted[0] == self._target):
                         can_press_e = (distance <= INTERACT_PX or prompt_ok) and not boss_not_ready and not portal_held
-                        commands = self._interact(self._target, now, spam_e=can_press_e, prompt_text=prompt_text)
+                        commands = self._interact(self._target, now, spam_e=can_press_e, prompt_text=prompt_text, pos=zone.player)
             elif prompt_ok:
-                commands = self._interact(prompt_text, now, spam_e=True)
+                commands = self._interact(prompt_text, now, spam_e=True, pos=zone.player)
             else:
                 if self._heading is not None and observation.north is not None:
                     self._bearing = observation.north + self._heading
@@ -381,6 +396,7 @@ class Bot:
         if observation.zone != self._zone:
             self._zone, self._visited, self._heading = observation.zone, set(), None
             self._zone_seconds, self._boss_fight, self._boss_beaten = None, False, False
+            self._ignored_instances = []
         left = observation.seconds_left
         if left is not None and (self._zone_seconds is None or left > self._zone_seconds):
             self._zone_seconds = left
@@ -402,8 +418,26 @@ class Bot:
                 weights[BOSS] = math.inf
         return {name: w for name, w in weights.items() if w > 0}
 
-    def _candidates(self, found: list[tuple[str, T]], now: float) -> list[tuple[str, T]]:
-        return [(name, where) for name, where in found if name in self._now_weights and not self._skipped(name, now)]
+    def _candidates(
+        self,
+        found: list[tuple[str, T]],
+        now: float,
+        player_pos: tuple[float, float] | None = None,
+        is_zonemap: bool = False,
+    ) -> list[tuple[str, T]]:
+        candidates = []
+        for name, where in found:
+            if name not in self._now_weights:
+                continue
+            if is_zonemap:
+                target_pos = (float(where[0]), float(where[1]))
+            elif player_pos is not None:
+                target_pos = player_pos
+            else:
+                target_pos = None
+            if not self._skipped(name, now, target_pos):
+                candidates.append((name, where))
+        return candidates
 
     def _best(
         self,
@@ -411,9 +445,10 @@ class Bot:
         origin: tuple[float, float],
         scale: float = 200.0,
     ) -> tuple[str, T]:
+        current = self._target
         return max(
             candidates,
-            key=lambda c: self._candidate_score(c[0], c[1], origin, scale),
+            key=lambda c: self._candidate_score(c[0], c[1], origin, scale, is_current=(c[0] == current)),
         )
 
     def _candidate_score(
@@ -422,6 +457,7 @@ class Bot:
         pos: tuple[float, float],
         origin: tuple[float, float],
         scale: float,
+        is_current: bool = False,
     ) -> tuple[float, float]:
         dist = math.hypot(pos[0] - origin[0], pos[1] - origin[1])
         weight = self._now_weights.get(name, 0.0)
@@ -431,18 +467,42 @@ class Bot:
             return (math.inf, -dist)
         norm_dist = min(dist / scale, 1.0) if scale > 0 else 0.0
         score = weight * (1.0 + self._movement.distance_factor * (1.0 - norm_dist))
+        # 15% hysteresis bonus to the currently chosen target to prevent flip-flopping
+        if is_current:
+            score *= 1.15
         return (score, -dist)
 
-    def _skipped(self, name: str, now: float) -> bool:
-        return now < self._ignored.get(name, 0.0)
+    def _skipped(self, name: str, now: float, pos: tuple[float, float] | None = None) -> bool:
+        if now < self._ignored.get(name, 0.0):
+            return True
+        if pos is not None:
+            for ign_name, (ix, iy), until in self._ignored_instances:
+                if now < until and (ign_name == name or (name in SUPER_BALLS and ign_name in SUPER_BALLS)):
+                    if math.hypot(pos[0] - ix, pos[1] - iy) < 0.08:
+                        return True
+        return False
 
-    def _ignore_target(self, name: str, until: float) -> None:
-        self._ignored[name] = until
-        if name in SUPER_BALLS:
-            self._ignored[SUPER_BALL] = until
-            self._ignored[GIFT_BALL] = until
+    def _ignore_target(self, name: str, until: float, pos: tuple[float, float] | None = None) -> None:
+        if pos is not None:
+            self._ignored_instances.append((name, pos, until))
+            if name in SUPER_BALLS:
+                self._ignored_instances.append((SUPER_BALL, pos, until))
+                self._ignored_instances.append((GIFT_BALL, pos, until))
+        else:
+            self._ignored[name] = until
+            if name in SUPER_BALLS:
+                self._ignored[SUPER_BALL] = until
+                self._ignored[GIFT_BALL] = until
 
-    def _interact(self, name: str, now: float, *, spam_e: bool = True, prompt_text: str = "") -> list[Command]:
+    def _interact(
+        self,
+        name: str,
+        now: float,
+        *,
+        spam_e: bool = True,
+        prompt_text: str = "",
+        pos: tuple[float, float] | None = None,
+    ) -> list[Command]:
         """Spam E while close; if the target is still not taken INTERACT_WAIT_S later, skip its kind a while."""
         if self._interacted is None or self._interacted[0] != name:
             if not spam_e:
@@ -459,9 +519,9 @@ class Bot:
             if name not in (PORTAL, "进入传送门", "离开圣地"):
                 log.info("%s: E did nothing (not enough money?), skipping for %g s", name, self._movement.target_ignore_s)
                 until = now + self._movement.target_ignore_s
-                self._ignore_target(name, until)
+                self._ignore_target(name, until, pos=pos)
                 if prompt_text and prompt_text not in (PORTAL, "进入传送门", "离开圣地"):
-                    self._ignore_target(prompt_text, until)
+                    self._ignore_target(prompt_text, until, pos=pos)
             self._interacted = None
             self._temp_target = None
             return []
@@ -548,16 +608,18 @@ class Bot:
     def _close_team_view(self, now: float) -> list[Command]:
         """Letting go of Tab while a choice popup is open (it came up mid-exploration) opens the
         team view over it. Tab goes back to the choice."""
-        if self._answered and self._answered[0] == TEAM_VIEW and now - self._answered[1] < POPUP_RETRY_S:
+        team_state = (TEAM_VIEW, (), False)
+        if self._answered and self._answered[0] == team_state and now - self._answered[1] < POPUP_RETRY_S:
             return []
-        self._answered = (TEAM_VIEW, now)
+        self._answered = (team_state, now)
         log.info("team view open over the popup: Tab back to the choice")
         return [ReleaseAll(), Press(MAP_KEY)]
 
     def _answer(self, popup: Popup, now: float) -> list[Command]:
-        if self._answered and self._answered[0] == popup.title and now - self._answered[1] < POPUP_RETRY_S:
+        popup_state = (popup.title, tuple(c.name for c in popup.cards), popup.in_banish)
+        if self._answered and self._answered[0] == popup_state and now - self._answered[1] < POPUP_RETRY_S:
             return []
-        self._answered = (popup.title, now)
+        self._answered = (popup_state, now)
         action = self._choose(popup)
         if action is None:
             return [ReleaseAll(), Pause(f"unknown popup: {popup.title}")]
@@ -566,7 +628,70 @@ class Bot:
     def _choose(self, popup: Popup) -> Press | Click | None:
         keyed = [card for card in popup.cards if card.key]
         if keyed:
+            if popup.in_banish:
+                banishable = [c for c in keyed if not c.is_locked_move]
+                if banishable:
+                    target = min(banishable, key=lambda c: self._cards.weight(c.name))
+                    log.info("%s [banish mode] -> banished [%s] %s", popup.title, target.key, target.name)
+                    return Press(target.key)
+                cancel = next((b for b in popup.buttons if b.text == "取消"), None)
+                if cancel:
+                    return Press(_key(cancel.key)) if cancel.key else Click(cancel.text)
+                return Press("Escape")
+
+            if self._banish_threshold is not None and popup.banishes > 0:
+                trash = [
+                    c for c in keyed
+                    if not c.is_locked_move and self._cards.weight(c.name) <= self._banish_threshold
+                ]
+                if trash:
+                    banish_btn = next((b for b in popup.buttons if BANISH_RE.search(b.text)), None)
+                    key = _key(banish_btn.key) if banish_btn and banish_btn.key else "z"
+                    log.info(
+                        "%s -> banish (%s offered with weight <= %g, %d left)",
+                        popup.title,
+                        ", ".join(f"{c.name} ({self._cards.weight(c.name)})" for c in trash),
+                        self._banish_threshold,
+                        popup.banishes,
+                    )
+                    return Press(key)
+
             card = self._cards.best(keyed)
+            best_weight = self._cards.weight(card.name)
+
+            if self._reroll_threshold is None or best_weight > self._reroll_threshold:
+                offered = " | ".join(f"[{c.key}] {c.name} ({c.rarity})" for c in keyed)
+                log.info("%s %s -> picked [%s] %s", popup.title, offered, card.key, card.name)
+                return Press(card.key)
+
+            if popup.rerolls > 0:
+                reroll_btn = next((b for b in popup.buttons if REROLL_RE.search(b.text)), None)
+                key = _key(reroll_btn.key) if reroll_btn and reroll_btn.key else "f"
+                log.info(
+                    "%s -> reroll (best [%s] %s has weight %g <= %g, %d left)",
+                    popup.title,
+                    card.key,
+                    card.name,
+                    best_weight,
+                    self._reroll_threshold,
+                    popup.rerolls,
+                )
+                return Press(key)
+
+            if self._skip_threshold is not None and best_weight < self._skip_threshold and popup.skips > 0:
+                skip_btn = next((b for b in popup.buttons if SKIP_RE.search(b.text)), None)
+                key = _key(skip_btn.key) if skip_btn and skip_btn.key else "x"
+                log.info(
+                    "%s -> skip (all cards negative, best [%s] %s has weight %g < %g, %d left)",
+                    popup.title,
+                    card.key,
+                    card.name,
+                    best_weight,
+                    self._skip_threshold,
+                    popup.skips,
+                )
+                return Press(key)
+
             offered = " | ".join(f"[{c.key}] {c.name} ({c.rarity})" for c in keyed)
             log.info("%s %s -> picked [%s] %s", popup.title, offered, card.key, card.name)
             return Press(card.key)

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Literal
 
+import numpy as np
+
 from autobonk.cards import Card
 from autobonk.frames import Frame
 from autobonk.icons import find_targets
@@ -30,6 +32,9 @@ IGNORED_BUTTONS = {"重试"}
 LEAVE_BUTTONS = ("离开", "以后再说")
 # The team view ("你的队伍") laid over a choice popup; its button goes back to the choice.
 TEAM_VIEW_BUTTON = "返回选择"
+REROLL_RE = re.compile(r"刷新\s*\((\d+)\)")
+SKIP_RE = re.compile(r"跳过\s*\((\d+)\)")
+BANISH_RE = re.compile(r"放逐\s*\((\d+)\)")
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,35 @@ class Popup:
     title: str  # the <h1>; "" for untitled popups (slot machine)
     cards: tuple[Card, ...]  # choices; key "" when the popup shows no [n] keys (Ditto, shop)
     buttons: tuple[Button, ...]
+
+    @property
+    def in_banish(self) -> bool:
+        """True if the modal is currently waiting for a card to banish ('取消' button visible)."""
+        return any(b.text == "取消" for b in self.buttons)
+
+    @property
+    def rerolls(self) -> int:
+        for b in self.buttons:
+            m = REROLL_RE.search(b.text)
+            if m:
+                return int(m.group(1))
+        return 0
+
+    @property
+    def skips(self) -> int:
+        for b in self.buttons:
+            m = SKIP_RE.search(b.text)
+            if m:
+                return int(m.group(1))
+        return 0
+
+    @property
+    def banishes(self) -> int:
+        for b in self.buttons:
+            m = BANISH_RE.search(b.text)
+            if m:
+                return int(m.group(1))
+        return 0
 
 
 @dataclass(frozen=True)
@@ -90,7 +124,9 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
     texts = [text for _, text in nodes]
     end_screen = next((END_TITLES[t.rstrip("!！")] for t in texts if t.rstrip("!！") in END_TITLES), None)
     countdown = next((t for t in texts if COUNTDOWN.fullmatch(t)), None)
-    altars = tuple(sorted(find_altars(frame.minimap), key=lambda p: p[0] ** 2 + p[1] ** 2))
+
+    minimap_rgb = load_rgb(frame.minimap) if frame.minimap else None
+    altars = tuple(sorted(find_altars(minimap_rgb), key=lambda p: p[0] ** 2 + p[1] ** 2)) if minimap_rgb is not None else ()
     charging = any(tag == "span" and CHARGE.fullmatch(text) for tag, text in nodes)
     zone = next((t for t in texts if ZONE.fullmatch(t)), None)
     team_view = ("button", TEAM_VIEW_BUTTON) in nodes
@@ -101,8 +137,10 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
     boss_down = any(BOSS_DOWN.fullmatch(t) for t in texts)
     return Observation(
         end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
-        north_bearing(frame.minimap), read_zonemap(frame.zonemap, targets), zone, team_view,
-        int(sealed.group(1)) if sealed else None, _minimap_targets(frame.minimap, targets),
+        north_bearing(minimap_rgb) if minimap_rgb is not None else None,
+        read_zonemap(frame.zonemap, targets), zone, team_view,
+        int(sealed.group(1)) if sealed else None,
+        _minimap_targets(minimap_rgb, targets) if minimap_rgb is not None else (),
         next((int(texts[i + 1]) for i, t in enumerate(texts[:-1]) if t == "Lv" and texts[i + 1].isdigit()), None),
         boss_down,
         prompt,
@@ -111,10 +149,10 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
     )
 
 
-def _minimap_targets(png: bytes, targets: tuple[str, ...]) -> tuple[tuple[str, Point], ...]:
-    if not png or not targets:
+def _minimap_targets(image: np.ndarray, targets: tuple[str, ...]) -> tuple[tuple[str, Point], ...]:
+    if not targets:
         return ()
-    found = [(name, (x - CENTRE, y - CENTRE)) for name, (x, y) in find_targets(load_rgb(png), list(targets))]
+    found = [(name, (x - CENTRE, y - CENTRE)) for name, (x, y) in find_targets(image, list(targets))]
     return tuple(sorted(found, key=lambda t: t[1][0] ** 2 + t[1][1] ** 2))
 
 

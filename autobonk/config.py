@@ -31,6 +31,9 @@ class Config:
     stuck_s: float = 2.5
     sidestep_s: float = 0.6
     distance_factor: float = 0.2
+    banish_threshold: float | None = -5.0
+    reroll_threshold: float | None = 0.0
+    skip_threshold: float | None = 0.0
 
 
 def load_config(path: Path) -> Config:
@@ -90,6 +93,9 @@ def load_config(path: Path) -> Config:
         stuck_s=bot.get("stuck_s", 2.5),
         sidestep_s=bot.get("sidestep_s", 0.6),
         distance_factor=float(bot.get("distance_factor", data.get("targets", {}).get("distance_factor", 0.2))),
+        banish_threshold=cards.get("banish_threshold", -5.0),
+        reroll_threshold=cards.get("reroll_threshold", 0.0),
+        skip_threshold=cards.get("skip_threshold", 0.0),
     )
 
 

@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from autobonk.choices import DRAIN_INPUTS_SCRIPT, RECORD_INPUTS_SCRIPT, ChoiceLo
 from autobonk.config import load_config
 from autobonk.controller import Controller
 from autobonk.driver import KeyboardDriver
+from autobonk.editor import run_editor
 from autobonk.frames import Frame, FrameRecorder, capture_frame
 from autobonk.perception import perceive
 from autobonk.hotkeys import start_hotkeys
@@ -28,6 +30,11 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     config = load_config(args.config)
+
+    # Start dashboard server on a daemon thread so it's always accessible
+    server = run_editor(args.config, port=8080, open_browser=False)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
 
     with sync_playwright() as playwright:
         context = launch(playwright, config)
@@ -62,6 +69,9 @@ def main(argv: list[str] | None = None) -> None:
                 ),
                 config.targets,
                 config.boss,
+                banish_threshold=config.banish_threshold,
+                reroll_threshold=config.reroll_threshold,
+                skip_threshold=config.skip_threshold,
             ),
             step_capture=lambda: capture_frame(page, cdp, fast=True),
             watch=watch_player,

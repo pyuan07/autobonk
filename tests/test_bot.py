@@ -76,20 +76,48 @@ def test_level_up_presses_the_weighted_card():
 
 
 def test_level_up_without_listed_cards_picks_highest_rarity_then_leftmost():
-    assert Bot().step(LEVEL_UP_19) == [ReleaseAll(), Press("1")]
-    assert Bot(cards=CardPrefs(rarity_order=("普通", "少见"))).step(LEVEL_UP_19) == [ReleaseAll(), Press("3")]
+    assert Bot(reroll_threshold=None).step(LEVEL_UP_19) == [ReleaseAll(), Press("1")]
+    assert Bot(cards=CardPrefs(rarity_order=("普通", "少见")), reroll_threshold=None).step(LEVEL_UP_19) == [ReleaseAll(), Press("3")]
 
 
 def test_negative_weight_avoids_a_card():
-    bot = Bot(cards=CardPrefs(weights={"双翼": -1}))
+    bot = Bot(cards=CardPrefs(weights={"双翼": -1, "防御强化": 1}))
 
     assert bot.step(LEVEL_UP_19) == [ReleaseAll(), Press("2")]
 
 
-def test_level_up_never_refreshes_skips_or_banishes():
-    for frame in (LEVEL_UP, LEVEL_UP_19):
-        pressed = {c.key for c in Bot().step(frame) if isinstance(c, Press)}
-        assert pressed and not pressed & {"F", "f", "X", "x", "Z", "z"}
+def test_level_up_rerolls_when_best_card_unwanted():
+    # When best card weight <= 0 and rerolls are available, press F
+    bot = Bot(cards=CardPrefs(weights={"双翼": 0}))
+    assert bot.step(LEVEL_UP_19) == [ReleaseAll(), Press("f")]
+
+
+def test_level_up_banishes_avoided_cards():
+    # LEVEL_UP_19 cards: 双翼 (locked move), 防御强化, 金珠, ＨＰ增强剂
+    # Avoid ＨＰ增强剂 (-5); 双翼 has "不会再升级" so it must not be banished
+    bot = Bot(cards=CardPrefs(weights={"ＨＰ增强剂": -5, "双翼": -5}))
+    # First step: enter banish mode
+    assert bot.step(LEVEL_UP_19) == [ReleaseAll(), Press("z")]
+
+    # Second step: inside banish mode (cancel button visible) -> pick card 4 (ＨＰ增强剂), never card 1 (双翼)
+    banish_modal = replace(
+        LEVEL_UP_19,
+        dom_snapshot=LEVEL_UP_19.dom_snapshot.replace(
+            '<button class="btn ghost small" style="display: none;">取消</button>',
+            '<button class="btn ghost small">取消</button>',
+        ),
+    )
+    assert bot.step(banish_modal) == [ReleaseAll(), Press("4")]
+
+
+def test_level_up_skips_when_all_negative_and_no_rerolls():
+    # If all cards are strictly negative and no rerolls left, press X
+    no_reroll = replace(
+        LEVEL_UP_19,
+        dom_snapshot=LEVEL_UP_19.dom_snapshot.replace("刷新 (7)<kbd>F</kbd>", "刷新 (0)<kbd>F</kbd>"),
+    )
+    bot = Bot(cards=CardPrefs(weights={"双翼": -1, "防御强化": -1, "金珠": -1, "ＨＰ增强剂": -1}))
+    assert bot.step(no_reroll) == [ReleaseAll(), Press("x")]
 
 
 def test_open_popup_is_not_pressed_again_until_a_second_has_passed():
@@ -98,7 +126,7 @@ def test_open_popup_is_not_pressed_again_until_a_second_has_passed():
     bot.step(LEVEL_UP_19)
 
     assert bot.step(replace(LEVEL_UP_19, timestamp=LEVEL_UP_19.timestamp + 0.9)) == []
-    assert bot.step(replace(LEVEL_UP_19, timestamp=LEVEL_UP_19.timestamp + 1.0)) == [ReleaseAll(), Press("1")]
+    assert bot.step(replace(LEVEL_UP_19, timestamp=LEVEL_UP_19.timestamp + 1.0)) == [ReleaseAll(), Press("f")]
 
 
 def test_card_weights_come_from_the_config_file(tmp_path):
@@ -113,7 +141,7 @@ def test_card_weights_come_from_the_config_file(tmp_path):
 def test_level_up_log_lists_every_offered_card(caplog):
     caplog.set_level("INFO")
 
-    Bot().step(LEVEL_UP_19)
+    Bot(cards=CardPrefs(weights={"双翼": 5})).step(LEVEL_UP_19)
 
     for offered in ("[1] 双翼 (少见)", "[2] 防御强化 (少见)", "[3] 金珠 (普通)", "[4] ＨＰ增强剂 (少见)"):
         assert offered in caplog.text
@@ -376,7 +404,7 @@ def test_team_view_over_a_popup_is_closed_with_tab_before_choosing():
 
 
 def test_after_the_team_view_closes_the_card_is_chosen():
-    bot = Bot()
+    bot = Bot(cards=CardPrefs(weights={"咬住": 1}))
     bot.step(TEAM_VIEW)
 
     [release, press] = bot.step(replace(LEVEL_UP, timestamp=100.2))
@@ -478,6 +506,35 @@ def test_presses_e_at_a_target_and_skips_it_when_nothing_happens():
     assert holds(bot.step(standing_on("喵喵", 105.0))) == []  # 5.0 s on: E did nothing, skip it
     assert holds(bot.step(standing_on("喵喵", 105.1))) == [Hold(frozenset({"Tab"}))]
     assert Press("KeyE") in bot.step(standing_on("喵喵", 166.0))
+
+
+def test_target_ignore_by_instance_allows_another_same_target():
+    bot = Bot(targets={"喵喵": 5}, movement=Movement(target_ignore_s=60))
+    bot._now_weights = {"喵喵": 5.0}
+
+    # First instance at (0.2, 0.2) fails after 5 seconds:
+    bot._ignore_target("喵喵", 160.0, pos=(0.2, 0.2))
+
+    # Candidate at (0.2, 0.2) is skipped:
+    zonemap_candidates = [("喵喵", (0.205, 0.205)), ("喵喵", (0.8, 0.8))]
+    filtered = bot._candidates(zonemap_candidates, now=110.0, is_zonemap=True)
+    assert len(filtered) == 1
+    assert filtered[0][1] == (0.8, 0.8)
+
+
+def test_target_selection_hysteresis_prevents_flip_flopping():
+    bot = Bot(targets={"A": 10, "B": 10}, movement=Movement(distance_factor=0.0))
+    bot._now_weights = {"A": 10.0, "B": 10.0}
+
+    # When no target is selected, highest/leftmost wins:
+    candidates = [("A", (100, 0)), ("B", (100, 0))]
+    assert bot._best(candidates, (0, 0))[0] == "A"
+
+    # Once "B" is the active target, its hysteresis bonus keeps it active even if A is slightly better:
+    bot._target = "B"
+    # Challenger A has base weight 10.0. Current target B has base weight 9.0 (with 1.15 bonus: 10.35):
+    bot._now_weights = {"A": 10.0, "B": 9.0}
+    assert bot._best(candidates, (0, 0))[0] == "B"
 
 
 def test_a_popup_after_e_means_it_worked():

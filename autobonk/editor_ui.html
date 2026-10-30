@@ -231,6 +231,32 @@
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
     .toast.error { border-left-color: var(--w-neg); }
 
+    
+    /* ---------- Live Telemetry Panel ---------- */
+    .live-panel {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px;
+      padding: 3px 8px; border-radius: 6px; width: fit-content;
+    }
+    .live-badge.running { background: rgba(60, 197, 168, 0.2); color: var(--w-pos); border: 1px solid var(--w-pos); }
+    .live-badge.paused { background: rgba(242, 193, 78, 0.2); color: var(--w-high); border: 1px solid var(--w-high); }
+    .live-badge.offline { background: rgba(144, 151, 176, 0.2); color: var(--muted); border: 1px solid var(--line); }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
+    .live-cell { background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
+    .live-cell span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    .live-cell b { font: 600 13px var(--num); color: var(--ink); }
+    .live-controls { display: flex; gap: 8px; margin-top: 4px; }
+    .btn-live-toggle { flex: 1; font-weight: 600; padding: 8px 10px; }
+    .live-logs {
+      background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+      font: 11px/1.4 var(--num); color: var(--muted); max-height: 140px; overflow-y: auto;
+      white-space: pre-wrap; word-break: break-all;
+    }
+
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; padding: 16px; }
       aside { position: static; max-height: none; }
@@ -261,6 +287,41 @@
 
   <div class="layout">
     <aside>
+      <section class="live-panel" id="livePanel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2>实时运行状态</h2>
+          <div class="live-badge offline" id="liveBadge">
+            <span class="live-dot"></span>
+            <span id="liveBadgeText">未连接</span>
+          </div>
+        </div>
+        <div class="live-grid">
+          <div class="live-cell">
+            <span>当前目标</span>
+            <b id="liveTarget">-</b>
+          </div>
+          <div class="live-cell">
+            <span>单步耗时</span>
+            <b id="liveStepMs">- ms</b>
+          </div>
+          <div class="live-cell">
+            <span>所在区域</span>
+            <b id="liveZone">-</b>
+          </div>
+          <div class="live-cell">
+            <span>充能状态</span>
+            <b id="liveCharging">否</b>
+          </div>
+        </div>
+        <div class="live-controls">
+          <button class="btn btn-primary btn-live-toggle" id="liveToggleBtn" onclick="toggleBotLive()">启动机器人</button>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--muted); margin-bottom:4px;">实时执行日志</div>
+          <div class="live-logs" id="liveLogs">等待连接...</div>
+        </div>
+      </section>
+
       <section class="panel">
         <h2>配置方案</h2>
         <div class="profiles" id="profiles"></div>
@@ -839,6 +900,74 @@
       else if (e.key === 'Escape' && e.target === $('search')) { $('search').value = ''; renderList(); }
     });
     window.addEventListener('beforeunload', e => { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+    
+    let botConnected = false;
+    let botPaused = true;
+
+    async function pollLiveStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error('status error');
+        const s = await res.json();
+        botConnected = s.connected;
+        botPaused = s.paused;
+
+        const badge = $('liveBadge');
+        const badgeText = $('liveBadgeText');
+        const toggleBtn = $('liveToggleBtn');
+
+        if (!botConnected) {
+          badge.className = 'live-badge offline';
+          badgeText.textContent = '未启动';
+          toggleBtn.disabled = true;
+          toggleBtn.textContent = '未连接到游戏';
+        } else if (botPaused) {
+          badge.className = 'live-badge paused';
+          badgeText.textContent = '已暂停 (F8)';
+          toggleBtn.disabled = false;
+          toggleBtn.textContent = '恢复运行';
+          toggleBtn.className = 'btn btn-primary btn-live-toggle';
+        } else {
+          badge.className = 'live-badge running';
+          badgeText.textContent = '运行中';
+          toggleBtn.disabled = false;
+          toggleBtn.textContent = '暂停机器人';
+          toggleBtn.className = 'btn btn-live-toggle';
+        }
+
+        $('liveTarget').textContent = s.target || (s.charging ? '符文祭坛充能中' : '探索漫游');
+        $('liveStepMs').textContent = s.step_duration_ms ? `${s.step_duration_ms} ms` : '-';
+        $('liveZone').textContent = s.zone || '游戏中';
+        $('liveCharging').textContent = s.charging ? '是 (充能中)' : '否';
+
+        if (s.recent_logs && s.recent_logs.length > 0) {
+          const logsEl = $('liveLogs');
+          logsEl.textContent = s.recent_logs.slice(-15).join('\n');
+          logsEl.scrollTop = logsEl.scrollHeight;
+        }
+      } catch (err) {
+        // server might be restarting
+      }
+    }
+
+    async function toggleBotLive() {
+      if (!botConnected) return;
+      const nextAction = botPaused ? 'start' : 'pause';
+      try {
+        await fetch('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: nextAction })
+        });
+        setTimeout(pollLiveStatus, 200);
+      } catch (err) {
+        toast('操作失败: ' + err, true);
+      }
+    }
+
+    setInterval(pollLiveStatus, 1000);
+    setTimeout(pollLiveStatus, 200);
 
     init();
   </script>

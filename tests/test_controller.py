@@ -3,6 +3,7 @@ import threading
 from pathlib import Path
 
 from autobonk.bot import Bot, Pause
+from autobonk.cards import CardPrefs
 from autobonk.controller import Controller
 from autobonk.frames import Frame, FrameRecorder, load_frame
 
@@ -138,7 +139,8 @@ def test_end_screen_stops_the_loop_with_keys_released(tmp_path, caplog):
 
 def test_pressed_card_key_reaches_the_driver_after_keys_are_released(tmp_path):
     level_up = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-022221-064")
-    controller, driver, _ = make_controller(tmp_path, capture=lambda: level_up, bot=Bot())
+    cards = CardPrefs(weights={"双翼": 10})
+    controller, driver, _ = make_controller(tmp_path, capture=lambda: level_up, bot=Bot(cards=cards))
     controller.submit("toggle_pause")
     controller.poll()
     driver.calls.clear()

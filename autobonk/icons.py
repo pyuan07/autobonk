@@ -50,14 +50,25 @@ def find_targets(image: np.ndarray, names: list[str] | None = None) -> list[Icon
     names = list(ICONS) if names is None else [n for n in names if n in ICONS]
     if not names:
         return []
-    templates = [_template(ICON_DIR / ICONS[name]) for name in names]
+    # Deduplicate templates when multiple names share the same file (e.g. 超级球 and 礼物球 -> gift.png)
+    template_to_names: dict[str, list[str]] = {}
+    for name in names:
+        template_file = ICONS[name]
+        template_to_names.setdefault(template_file, []).append(name)
+
+    unique_files = list(template_to_names.keys())
+    templates = [_template(ICON_DIR / f) for f in unique_files]
     found: list[tuple[float, Icon]] = []
-    for name, template, scores in zip(names, templates, match_many(image, templates)):
+    for template_file, template, scores in zip(unique_files, templates, match_many(image, templates)):
         size = template.shape[0]
+        shared_names = template_to_names[template_file]
         while True:
             y, x = np.unravel_index(scores.argmax(), scores.shape)
             if scores[y, x] < ICON_MATCH:
                 break
-            found.append((float(scores[y, x]), (name, (int(x) + size // 2, int(y) + size // 2))))
+            score = float(scores[y, x])
+            pos = (int(x) + size // 2, int(y) + size // 2)
+            for name in shared_names:
+                found.append((score, (name, pos)))
             scores[max(0, y - size):y + size, max(0, x - size):x + size] = -1
     return [icon for _, icon in sorted(found, key=lambda f: -f[0])]

@@ -27,6 +27,11 @@ class Card:
     rarity: str
     details: tuple[str, ...] = field(default=(), compare=False)  # effect text, for logs only
 
+    @property
+    def is_locked_move(self) -> bool:
+        """True if banishing this card would permanently lock an owned move at its current level."""
+        return any("不会再升级" in d for d in self.details)
+
 
 @dataclass(frozen=True)
 class CardPrefs:

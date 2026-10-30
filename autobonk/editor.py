@@ -15,6 +15,7 @@ from urllib.parse import unquote
 
 from autobonk.cards import blessing_key
 from autobonk.bot import BOSS, BossRule
+from autobonk.hub import hub
 from autobonk.icons import ICON_DIR, ITEM_ICONS, POKEMON_ICONS
 from autobonk.minimap import ALTAR_TEMPLATE
 
@@ -350,6 +351,8 @@ def make_handler(config_path: Path):
                 data = build_full_card_list(config_path)
                 data["config_path"] = str(config_path)
                 self._send(HTTPStatus.OK, "application/json", json.dumps(data, ensure_ascii=False))
+            elif path == "/api/status":
+                self._send(HTTPStatus.OK, "application/json", json.dumps(hub.get_snapshot(), ensure_ascii=False))
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -365,7 +368,7 @@ def make_handler(config_path: Path):
             )
 
         def do_POST(self) -> None:
-            if self.path not in ("/api/save", "/api/targets"):
+            if self.path not in ("/api/save", "/api/targets", "/api/control"):
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
             if not self._same_origin():
@@ -379,6 +382,13 @@ def make_handler(config_path: Path):
             body = self.rfile.read(length)
             try:
                 data = json.loads(body.decode("utf-8"))
+                if self.path == "/api/control":
+                    action = str(data.get("action", ""))
+                    if action in ("start", "pause", "toggle_pause"):
+                        hub.request_action(action)
+                        self._send(HTTPStatus.OK, "application/json", json.dumps({"status": "ok", "action": action}))
+                        return
+                    raise ValueError(f"unknown action: {action}")
                 if self.path == "/api/targets":
                     save_target_weights(
                         config_path, _target_weights(data.get("weights", {})), _boss_from(data.get("boss", {}))
@@ -418,7 +428,7 @@ def find_free_port(preferred_port: int) -> int:
     return preferred_port
 
 
-def run_editor(config_path: Path, port: int = 8080, open_browser: bool = True) -> None:
+def run_editor(config_path: Path, port: int = 8080, open_browser: bool = True) -> HTTPServer:
     config_path = Path(config_path).resolve()
     actual_port = find_free_port(port)
     server_address = ("127.0.0.1", actual_port)
@@ -427,7 +437,7 @@ def run_editor(config_path: Path, port: int = 8080, open_browser: bool = True) -
 
     url = f"http://127.0.0.1:{actual_port}/"
     print("\n=======================================================")
-    print("  PokéBonk Weight Editor is running! (cards /, map targets /targets)")
+    print("  PokéBonk Dashboard & Editor running: (cards /, map targets /targets)")
     print(f"  Config: {config_path}")
     print(f"  Open in browser: {url}")
     print("  Press Ctrl+C to stop the server.")
@@ -436,12 +446,7 @@ def run_editor(config_path: Path, port: int = 8080, open_browser: bool = True) -
     if open_browser:
         webbrowser.open(url)
 
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nStopping server...")
-    finally:
-        httpd.server_close()
+    return httpd
 
 
 def main() -> None:
@@ -460,7 +465,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    run_editor(config_path=args.config, port=args.port, open_browser=not args.no_browser)
+    httpd = run_editor(config_path=args.config, port=args.port, open_browser=not args.no_browser)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping server...")
+    finally:
+        httpd.server_close()
 
 
 if __name__ == "__main__":

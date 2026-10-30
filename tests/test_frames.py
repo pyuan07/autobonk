@@ -56,13 +56,13 @@ def test_frames_saved_at_the_same_instant_get_unique_names(tmp_path):
     assert len(list((tmp_path / "frames").iterdir())) == 6
 
 
-def test_fast_capture_takes_a_jpeg_saved_capture_a_png():
+def test_fast_capture_skips_screenshot_saved_capture_takes_png():
     cdp = FakeCdp()
 
     saved = capture_frame(FakePage(), cdp, clock=lambda: 0.0)
     fast = capture_frame(FakePage(), cdp, clock=lambda: 0.0, fast=True)
 
-    assert (saved.screenshot, fast.screenshot) == (b"\x89PNG fake", b"JPEG fake")
+    assert (saved.screenshot, fast.screenshot) == (b"\x89PNG fake", b"")
 
 
 def test_screenshots_go_straight_to_chrome_without_a_clip():
@@ -70,9 +70,8 @@ def test_screenshots_go_straight_to_chrome_without_a_clip():
     cdp = FakeCdp()
 
     capture_frame(FakePage(), cdp, clock=lambda: 0.0)
-    capture_frame(FakePage(), cdp, clock=lambda: 0.0, fast=True)
 
-    assert [method for method, _ in cdp.sent] == ["Page.captureScreenshot"] * 2
+    assert [method for method, _ in cdp.sent] == ["Page.captureScreenshot"]
     assert all("clip" not in params for _, params in cdp.sent)
 
 

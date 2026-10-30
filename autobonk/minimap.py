@@ -26,19 +26,23 @@ CENTRE = 200
 Point = tuple[int, int]  # offset from the player, x right and y down, in minimap pixels
 
 
-def find_altars(png: bytes) -> list[Point]:
-    if not png:
-        return []
-    return [(x - CENTRE, y - CENTRE) for x, y in find_icons(load_rgb(png), ALTAR_TEMPLATE, ALTAR_MATCH)]
+def find_altars(image: np.ndarray | bytes) -> list[Point]:
+    if isinstance(image, bytes):
+        if not image:
+            return []
+        image = load_rgb(image)
+    return [(x - CENTRE, y - CENTRE) for x, y in find_icons(image, ALTAR_TEMPLATE, ALTAR_MATCH)]
 
 
-def north_bearing(png: bytes) -> float | None:
+def north_bearing(image: np.ndarray | bytes) -> float | None:
     """Where 北 sits on the rim, in degrees clockwise from minimap-up (W). A north-up compass
     bearing b then shows on the minimap at bearing `north + b`."""
-    if not png:
-        return None
+    if isinstance(image, bytes):
+        if not image:
+            return None
+        image = load_rgb(image)
     template = _template(NORTH_TEMPLATE)
-    scores = _match(load_rgb(png), template)
+    scores = _match(image, template)
     half = template.shape[0] // 2
     ys, xs = np.mgrid[: scores.shape[0], : scores.shape[1]]
     distance = np.hypot(xs + half - CENTRE, ys + half - CENTRE)

@@ -47,14 +47,17 @@ class CdpSession(Protocol):
 
 
 def capture_frame(page: Page, cdp: CdpSession, clock: Callable[[], float] = time.time, *, fast: bool = False) -> Frame:
-    """`fast` takes a JPEG instead of a PNG for live bot steps; saved frames use PNG.
+    """`fast` skips taking the full-page screenshot for live bot steps (perceive only uses DOM & canvases).
+    Saved frames (fast=False) capture a full PNG screenshot.
 
     Screenshots go straight to Chrome over CDP with no clip: Playwright's page.screenshot sends
     a clip, which makes the headed window visibly flash/resize on a scaled (e.g. 125%) display.
     """
     timestamp = clock()
-    params: dict[str, Any] = {"format": "jpeg", "quality": 70} if fast else {"format": "png"}
-    screenshot = base64.b64decode(cdp.send("Page.captureScreenshot", params)["data"])
+    screenshot = b""
+    if not fast:
+        params: dict[str, Any] = {"format": "png"}
+        screenshot = base64.b64decode(cdp.send("Page.captureScreenshot", params)["data"])
     return Frame(
         screenshot, page.content(), timestamp, page.url, _canvas(page, MINIMAP_SCRIPT), _canvas(page, ZONEMAP_SCRIPT)
     )
