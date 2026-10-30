@@ -182,6 +182,18 @@ def test_banners_and_notices_are_not_popups(name):
     assert Bot().step(recorded(name)) == []
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "155532-914",  # 头目宝可梦！ boss banner while the pause menu's buttons sit later in the DOM
+        "155654-906",  # 头目水伊布倒下了！ banner next to the visible 放生 pill
+        "160041-764",  # 森林之心 zone intro
+    ],
+)
+def test_banners_followed_by_hud_buttons_are_not_popups(name):
+    assert Bot().step(load_frame(FRAMES / f"frame-20261030-{name}")) == []
+
+
 def popup(body: str) -> Frame:
     return Frame(b"", f'<div class="timer">8:00</div><div class="modal">{body}</div>', 100.0, "")
 

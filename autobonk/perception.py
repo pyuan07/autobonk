@@ -44,18 +44,22 @@ class Observation:
 
 
 def perceive(frame: Frame) -> Observation:
-    nodes = visible_nodes(frame.dom_snapshot)
+    parsed = _parse(frame.dom_snapshot)
+    nodes = parsed.nodes
     texts = [text for _, text in nodes]
     end_screen = next((END_TITLES[t.rstrip("!！")] for t in texts if t.rstrip("!！") in END_TITLES), None)
     countdown = next((t for t in texts if COUNTDOWN.fullmatch(t)), None)
-    return Observation(end_screen, countdown, _popup(nodes))
+    return Observation(end_screen, countdown, _popup(nodes, parsed.scopes))
 
 
-def _popup(nodes: list[tuple[str, str]]) -> Popup | None:
-    """A popup is an <h1> followed by buttons or [n] keys; banners are an <h1> with neither.
+def _popup(nodes: list[tuple[str, str]], scopes: list[tuple[int, ...]]) -> Popup | None:
+    """A popup is an <h1> with buttons or [n] keys inside the h1's own container (.modal);
+    banners (.bn-txt, .stageintro) hold only text, and HUD buttons elsewhere don't count.
     Untitled popups (slot machine) are recognised by a leave button alone."""
     for start in reversed([i for i, (tag, _) in enumerate(nodes) if tag == "h1"]):
-        body = nodes[start + 1:]
+        container = scopes[start][-2] if len(scopes[start]) > 1 else None
+        end = next((i for i in range(start + 1, len(nodes)) if container not in scopes[i]), len(nodes))
+        body = nodes[start + 1:end]
         buttons, cards = _buttons(body), _cards(body)
         if buttons or any(card.key for card in cards):
             return Popup(nodes[start][1], cards, buttons)
@@ -109,10 +113,14 @@ def visible_texts(html: str) -> list[str]:
 
 def visible_nodes(html: str) -> list[tuple[str, str]]:
     """Like `visible_texts`, paired with each text's enclosing tag."""
+    return _parse(html).nodes
+
+
+def _parse(html: str) -> "_VisibleText":
     parser = _VisibleText()
     parser.feed(html)
     parser.close()
-    return parser.nodes
+    return parser
 
 
 _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
@@ -124,13 +132,16 @@ class _VisibleText(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.nodes: list[tuple[str, str]] = []
-        self._stack: list[tuple[str, bool]] = []  # (tag, hides its content)
+        self.scopes: list[tuple[int, ...]] = []  # per node: ids of its open elements, outermost first
+        self._stack: list[tuple[str, bool, int]] = []  # (tag, hides its content, element id)
+        self._next_id = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _VOID:
             return
         style = dict(attrs).get("style") or ""
-        self._stack.append((tag, tag in _NO_TEXT or bool(_DISPLAY_NONE.search(style))))
+        self._stack.append((tag, tag in _NO_TEXT or bool(_DISPLAY_NONE.search(style)), self._next_id))
+        self._next_id += 1
 
     def handle_endtag(self, tag: str) -> None:
         for i in range(len(self._stack) - 1, -1, -1):
@@ -140,5 +151,6 @@ class _VisibleText(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         text = data.strip()
-        if text and not any(hidden for _, hidden in self._stack):
+        if text and not any(hidden for _, hidden, _ in self._stack):
             self.nodes.append((self._stack[-1][0] if self._stack else "", text))
+            self.scopes.append(tuple(element for _, _, element in self._stack))
