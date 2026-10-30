@@ -99,6 +99,27 @@ def test_minimap_is_saved_beside_the_frame_and_loads_back(tmp_path):
     assert load_frame(path) == frame
 
 
+ZONEMAP_PNG = b"\x89PNG zonemap"
+
+
+class FakeTabPage(FakePage):
+    """Tab held: the floating zone map canvas (canvas.bm-cv) is on screen too."""
+
+    def evaluate(self, script):
+        image = ZONEMAP_PNG if "bm-cv" in script else MINIMAP_PNG
+        return "data:image/png;base64," + base64.b64encode(image).decode()
+
+
+def test_zone_map_is_saved_beside_the_frame_and_loads_back(tmp_path):
+    frame = capture_frame(FakeTabPage(), FakeCdp(), clock=lambda: 0.0)
+
+    path = FrameRecorder(tmp_path).save(frame)
+
+    assert frame.zonemap == ZONEMAP_PNG
+    assert (tmp_path / (path.name + ".zonemap.png")).read_bytes() == ZONEMAP_PNG
+    assert load_frame(path) == frame
+
+
 def test_without_a_minimap_canvas_the_frame_has_no_minimap(tmp_path):
     frame = capture_frame(FakePage(), FakeCdp(), clock=lambda: 0.0)
     path = FrameRecorder(tmp_path).save(frame)
@@ -106,3 +127,5 @@ def test_without_a_minimap_canvas_the_frame_has_no_minimap(tmp_path):
     assert frame.minimap == b""
     assert not (tmp_path / (path.name + ".minimap.png")).exists()
     assert load_frame(path).minimap == b""
+    assert frame.zonemap == b""
+    assert not (tmp_path / (path.name + ".zonemap.png")).exists()
