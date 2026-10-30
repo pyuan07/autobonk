@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from autobonk.cards import blessing_key
+from autobonk.bot import BOSS, BossRule
 from autobonk.icons import ICON_DIR, ITEM_ICONS, POKEMON_ICONS
 from autobonk.minimap import ALTAR_TEMPLATE
 
@@ -26,10 +27,11 @@ DEFAULT_TARGET_WEIGHTS = {ALTAR_NAME: 10.0}
 # Every map icon the bot can look for, grouped as the targets page shows them: name -> image.
 TARGET_GROUPS: list[tuple[str, dict[str, Path]]] = [
     ("祭坛", {ALTAR_NAME: ALTAR_TEMPLATE}),
-    ("物品与设施", {name: ICON_DIR / file for name, file in ITEM_ICONS.items()}),
+    ("物品与设施", {name: ICON_DIR / file for name, file in ITEM_ICONS.items() if name != BOSS}),
     ("宝可梦（商店、教学、头目）", {name: ICON_DIR / file for name, file in POKEMON_ICONS.items()}),
 ]
 TARGET_IMAGES = {name: path for _, icons in TARGET_GROUPS for name, path in icons.items()}
+TARGET_IMAGES[BOSS] = ICON_DIR / ITEM_ICONS[BOSS]
 DEFAULT_RARITY_ORDER = ["招式", "传说", "史诗", "稀有", "少见", "普通"]
 
 
@@ -71,24 +73,68 @@ def read_config_weights(
     return baseline_weights, rarity_order, active_pokemon, pokemon_profiles
 
 
-def read_target_weights(toml_path: Path) -> dict[str, float]:
-    if not toml_path.exists():
-        return dict(DEFAULT_TARGET_WEIGHTS)
-    data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
-    return dict(data.get("targets", {}).get("weights", DEFAULT_TARGET_WEIGHTS))
+def read_target_weights(toml_path: Path) -> tuple[dict[str, Any], BossRule]:
+    """[targets.weights] (a number, or [start, end]) and [targets.boss]."""
+    data = tomllib.loads(toml_path.read_text(encoding="utf-8")) if toml_path.exists() else {}
+    targets = data.get("targets", {})
+    boss = targets.get("boss", {})
+    default = BossRule()
+    rule = BossRule(tuple(boss.get("levels", default.levels)), tuple(boss.get("minutes_left", default.minutes_left)))
+    return dict(targets.get("weights", DEFAULT_TARGET_WEIGHTS)), rule
 
 
-def save_target_weights(toml_path: Path, weights: dict[str, float]) -> None:
-    """Rewrites [targets.weights] (separate from the card weights); every other table is kept as is."""
+def save_target_weights(toml_path: Path, weights: dict[str, Any], boss: BossRule | None = None) -> None:
+    """Rewrites [targets.weights] and [targets.boss] (apart from the card weights); every other table is kept."""
     content = toml_path.read_text(encoding="utf-8") if toml_path.exists() else ""
+    boss = boss or read_target_weights(toml_path)[1]
     other = _strip_tables(content, "targets")
     lines = [other.rstrip() + "\n\n" if other.strip() else ""]
     lines.append("[targets.weights]\n")
     lines.append("# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes\n")
-    lines.append("# first, then the nearest; 0 or unlisted = never. At an altar the bot stands in the ring; at\n")
-    lines.append("# anything else it presses E. Each icon listed costs ~15 ms per step to look for.\n")
-    _write_weights_table(lines, weights)
+    lines.append("# first, then the nearest; 0 or unlisted = never. [start, end]: the weight grows from start\n")
+    lines.append("# to end as the zone's time runs out. At an altar the bot stands in the ring; at anything else\n")
+    lines.append("# it presses E. Each icon listed costs ~15 ms per step to look for.\n")
+    for name, weight in sorted(weights.items(), key=lambda item: -max(_ends(item[1]))):
+        start, end = _ends(weight)
+        if max(start, end) > 0:
+            lines.append(f"{_quote(name)} = {_number(start) if start == end else f'[{_number(start)}, {_number(end)}]'}\n")
+    lines.append("\n[targets.boss]\n")
+    lines.append("# The area boss (骷髅): summoned with E in zone N once the level reaches levels[N-1], or once\n")
+    lines.append("# only minutes_left[N-1] are left; then it comes first. While it chases, altars are left.\n")
+    lines.append(f"levels = [{', '.join(_number(v) for v in boss.levels)}]\n")
+    lines.append(f"minutes_left = [{', '.join(_number(v) for v in boss.minutes_left)}]\n")
     _write_toml(toml_path, "".join(lines))
+
+
+def _ends(weight: Any) -> tuple[float, float]:
+    return (weight[0], weight[1]) if isinstance(weight, (list, tuple)) else (weight, weight)
+
+
+def _number(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else str(value)
+
+
+def _target_weights(weights: Any) -> dict[str, Any]:
+    if not isinstance(weights, dict):
+        raise ValueError("weights must be an object of name -> number or [start, end]")
+    out: dict[str, Any] = {}
+    for name, value in weights.items():
+        ends = value if isinstance(value, list) else [value]
+        if len(ends) not in (1, 2) or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in ends):
+            raise ValueError(f"weight for {name!r} is not a number or [start, end]: {value!r}")
+        out[str(name)] = value
+    return out
+
+
+def _boss_from(data: Any) -> BossRule:
+    if not isinstance(data, dict):
+        raise ValueError("boss must be an object")
+    rule = BossRule(tuple(data.get("levels", ())), tuple(data.get("minutes_left", ())))
+    if len(rule.levels) != 3 or len(rule.minutes_left) != 3:
+        raise ValueError("boss needs 3 levels and 3 minutes_left, one per zone")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (*rule.levels, *rule.minutes_left)):
+        raise ValueError("boss levels and minutes_left must be numbers")
+    return rule
 
 
 def _write_toml(toml_path: Path, text: str) -> None:
@@ -100,12 +146,15 @@ def _write_toml(toml_path: Path, text: str) -> None:
 
 
 def target_list(toml_path: Path) -> dict[str, Any]:
-    weights = read_target_weights(toml_path)
+    weights, boss = read_target_weights(toml_path)
+
+    def icon(name: str) -> dict[str, Any]:
+        start, end = _ends(weights.get(name, 0))
+        return {"name": name, "start": start, "end": end}
+
     return {
-        "groups": [
-            {"title": title, "icons": [{"name": name, "weight": weights.get(name, 0)} for name in icons]}
-            for title, icons in TARGET_GROUPS
-        ],
+        "groups": [{"title": title, "icons": [icon(name) for name in icons]} for title, icons in TARGET_GROUPS],
+        "boss": {"name": BOSS, "levels": list(boss.levels), "minutes_left": list(boss.minutes_left)},
     }
 
 
@@ -331,7 +380,9 @@ def make_handler(config_path: Path):
             try:
                 data = json.loads(body.decode("utf-8"))
                 if self.path == "/api/targets":
-                    save_target_weights(config_path, _numeric(data.get("weights", {})))
+                    save_target_weights(
+                        config_path, _target_weights(data.get("weights", {})), _boss_from(data.get("boss", {}))
+                    )
                     self._send(HTTPStatus.OK, "application/json", json.dumps({"status": "ok"}))
                     return
                 baseline_weights = data.get("baseline_weights", {})

@@ -103,12 +103,13 @@ def match_many(image: np.ndarray, templates: list[np.ndarray]) -> list[np.ndarra
     return results
 
 
-_spectra: dict[tuple[int, tuple[int, int]], np.ndarray] = {}
+_spectra: dict[tuple[bytes, tuple[int, ...], tuple[int, int]], np.ndarray] = {}
 
 
 def _template_spectrum(template: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    """Conjugate spectrum of the zero-mean, unit-variance template; cached for the cached templates."""
-    key = (id(template), shape)
+    """Conjugate spectrum of the zero-mean, unit-variance template, cached by content (a slice of a
+    cached template is a new array each time, and ids get reused)."""
+    key = (template.tobytes(), template.shape, shape)
     if key not in _spectra:
         normalised = (template - template.mean()) / template.std()
         _spectra[key] = np.conj(np.fft.rfft2(normalised, shape, axes=(0, 1)))

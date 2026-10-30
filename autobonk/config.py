@@ -4,6 +4,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from autobonk.bot import BossRule, Weight
 from autobonk.cards import DEFAULT_RARITY_ORDER, CardPrefs
 
 
@@ -24,8 +25,9 @@ class Config:
     jump_interval_s: tuple[float, float] = (0.8, 1.4)
     altar_charge_cap_s: float = 45.0
     target_ignore_s: float = 60.0
-    # Map icon name -> weight ([targets.weights]); rune altars are "符文祭坛".
-    targets: dict[str, float] = field(default_factory=lambda: {"符文祭坛": 10.0})
+    # Map icon name -> weight, or (start, end) growing as the zone's time runs out ([targets.weights]).
+    targets: dict[str, Weight] = field(default_factory=lambda: {"符文祭坛": 10.0})
+    boss: BossRule = BossRule()  # [targets.boss]
     stuck_s: float = 2.5
     sidestep_s: float = 0.6
 
@@ -74,7 +76,19 @@ def load_config(path: Path) -> Config:
         jump_interval_s=tuple(bot.get("jump_interval_s", (0.8, 1.4))),
         altar_charge_cap_s=bot.get("altar_charge_cap_s", 45),
         target_ignore_s=bot.get("target_ignore_s", 60),
-        targets=dict(data.get("targets", {}).get("weights", {"符文祭坛": 10.0})),
+        targets={
+            name: tuple(w) if isinstance(w, list) else w
+            for name, w in data.get("targets", {}).get("weights", {"符文祭坛": 10.0}).items()
+        },
+        boss=_boss_rule(data.get("targets", {}).get("boss", {})),
         stuck_s=bot.get("stuck_s", 2.5),
         sidestep_s=bot.get("sidestep_s", 0.6),
+    )
+
+
+def _boss_rule(table: dict) -> BossRule:
+    default = BossRule()
+    return BossRule(
+        levels=tuple(table.get("levels", default.levels)),
+        minutes_left=tuple(table.get("minutes_left", default.minutes_left)),
     )

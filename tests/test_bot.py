@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from autobonk.bot import Bot, Click, Hold, Movement, Pause, Press, ReleaseAll, Stop
+from autobonk.bot import BossRule, Bot, Click, Hold, Movement, Pause, Press, ReleaseAll, Stop
 from autobonk.cards import CardPrefs
 from autobonk.config import load_config
 from autobonk.frames import Frame, load_frame
@@ -455,3 +455,65 @@ def test_a_popup_after_e_means_it_worked():
     bot.step(replace(LEVEL_UP, timestamp=100.5))
 
     assert Press("KeyE") in bot.step(standing_on("精灵球", 101.6))
+
+
+def test_reads_level_time_left_and_the_boss_down_banner():
+    seen = perceive(SEALED)
+
+    assert (seen.level, seen.zone_index, seen.seconds_left) == (73, 2, 522)
+    assert perceive(run_frame("155654-906", 0)).boss_down  # 头目水伊布倒下了！
+    assert not perceive(run_frame("155532-914", 0)).boss_down  # 头目宝可梦！ (it just appeared)
+
+
+def with_countdown(frame: Frame, countdown: str) -> Frame:
+    return replace(frame, dom_snapshot=frame.dom_snapshot.replace(">8:42<", f">{countdown}<", 1))
+
+
+def test_a_growing_weight_starts_at_its_start_weight_and_grows_as_time_runs_out():
+    bot = Bot(targets={"精灵球": (0, 6)})
+
+    assert holds(bot.step(with_countdown(ORE_AND_BALLS, "10:00"))) == [Hold(frozenset({"Tab"}))]  # weight 0
+    assert holds(bot.step(replace(ORE_AND_BALLS, timestamp=101.0))) == [Hold(frozenset({"KeyW", "KeyA"}))]
+
+
+def test_growing_weights_overtake_fixed_ones():
+    bot = Bot(targets={"精灵球": (0, 10), "矿堆": 3})
+    bot.step(with_countdown(ORE_AND_BALLS, "10:00"))  # Poké Balls 0 < ore 3
+
+    bot.step(replace(ORE_AND_BALLS, timestamp=101.0))  # 8:42, 78 s of 600 gone: Poké Balls 1.3 < ore 3
+    assert bot._now_weights == {"矿堆": 3.0, "精灵球": pytest.approx(1.3)}
+    bot.step(with_countdown(ORE_AND_BALLS, "3:00"))
+    assert bot._now_weights["精灵球"] == pytest.approx(7.0)
+
+
+def test_boss_rule_level_or_time_per_zone():
+    rule = BossRule(levels=(35, 60, 80), minutes_left=(4, 8, 8))
+
+    assert rule.ready(1, 35, 500) and not rule.ready(1, 34, 500)
+    assert rule.ready(1, 10, 240) and not rule.ready(1, 10, 241)
+    assert rule.ready(2, 10, 480) and not rule.ready(2, 59, 481)
+    assert rule.ready(3, 80, 600)
+
+
+def test_the_boss_is_not_summoned_until_strong_enough():
+    bot = Bot(boss=BossRule(levels=(99, 99, 99), minutes_left=(0, 0, 0)))
+
+    assert Press("KeyE") not in bot.step(standing_on("骷髅", 100.0))
+
+
+def test_once_strong_enough_the_boss_is_summoned_and_altars_are_left_while_it_chases():
+    bot = Bot(boss=BossRule(levels=(1, 1, 1)))
+    skull = replace(run_frame("155220-116", 100.0), minimap=standing_on("骷髅", 0).minimap)  # same zone as below
+
+    assert Press("KeyE") in bot.step(skull)
+    # Chased: the altar ahead is not walked to (it needs standing still); explore instead.
+    assert holds(bot.step(run_frame("155220-116", 101.0))) == [Hold(frozenset({"Tab"}))]
+
+
+def test_after_the_boss_falls_altars_count_again_and_it_is_not_summoned_twice():
+    bot = Bot(boss=BossRule(levels=(1, 1, 1)))
+    bot.step(standing_on("骷髅", 100.0))
+    beaten = replace(run_frame("155654-906", 101.0), minimap=standing_on("骷髅", 0).minimap)
+
+    assert Press("KeyE") not in bot.step(beaten)
+    assert "骷髅" not in bot._now_weights and "符文祭坛" in bot._now_weights

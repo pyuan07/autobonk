@@ -62,6 +62,15 @@
     .icon.off:hover, .icon.off:focus-within { opacity: 1; }
     .icon.on img { border-color: var(--w-pos); }
     .icon.high img { border-color: var(--w-high); }
+    .ends { display: flex; flex-direction: column; gap: 4px; }
+    .ends label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .ends label > span:first-child { width: 24px; }
+    .boss { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .boss img { width: 64px; height: 64px; image-rendering: pixelated; border-radius: 50%; border: 3px solid var(--w-neg); background: #fff; }
+    .boss table { border-collapse: collapse; }
+    .boss th, .boss td { padding: 4px 10px; text-align: center; font-size: 13px; }
+    .boss th { color: var(--muted); font-weight: 600; }
+    .boss .note { flex: 1; min-width: 220px; color: var(--muted); font-size: 12px; }
     .stepper { display: flex; align-items: center; gap: 4px; }
     .stepper button { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); }
     .stepper button:hover { border-color: var(--faint); }
@@ -94,16 +103,22 @@
   <main>
     <p class="intro">
       机器人在小地图（找不到时按住 Tab 看大地图）上寻找这些图标。<b>权重高的先去，同权重先去近的；0 = 不去。</b>
+      <b>开始 → 结束</b>：区域刚开始时用开始权重，随着倒计时减少慢慢变成结束权重（比如精灵球 0 → 6：一开始没钱不去，后面才去）。两个一样就是固定权重。
       到了祭坛会站在圈里等充能；到了其他目标按 <b>E</b>，按了没反应（比如钱不够）就先跳过这类目标一段时间。
       每多选一种图标，每一步约多花 15 毫秒识别，只选需要的。
       <span id="summary"></span>
     </p>
+    <section>
+      <h2>区域头目</h2>
+      <div class="boss" id="boss"></div>
+    </section>
     <div id="groups"></div>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
     let groups = [];
+    let boss = null;
     let dirty = false;
 
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -113,8 +128,10 @@
         const res = await fetch('/api/targets');
         const data = await res.json();
         groups = data.groups;
+        boss = data.boss;
         document.getElementById('configPath').textContent = data.config_path;
         render();
+        renderBoss();
       } catch (err) {
         toast('读取失败：' + err, true);
       }
@@ -125,13 +142,17 @@
         <section style="margin-bottom:20px">
           <h2>${esc(g.title)}</h2>
           <div class="grid">${g.icons.map((icon, ii) => `
-            <div class="icon ${cls(icon.weight)}" data-g="${gi}" data-i="${ii}">
+            <div class="icon ${cls(icon)}" data-g="${gi}" data-i="${ii}">
               <img src="/icons/${encodeURIComponent(icon.name)}" alt="">
               <span class="name">${esc(icon.name)}</span>
-              <div class="stepper">
-                <button type="button" data-step="-1" aria-label="${esc(icon.name)} 权重减 1">−</button>
-                <input type="number" step="1" min="0" value="${icon.weight}" aria-label="${esc(icon.name)} 权重">
-                <button type="button" data-step="1" aria-label="${esc(icon.name)} 权重加 1">+</button>
+              <div class="ends">${['start', 'end'].map((end) => `
+                <label><span>${end === 'start' ? '开始' : '结束'}</span>
+                  <span class="stepper">
+                    <button type="button" data-end="${end}" data-step="-1" aria-label="${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重减 1">−</button>
+                    <input type="number" step="1" min="0" data-end="${end}" value="${icon[end]}" aria-label="${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重">
+                    <button type="button" data-end="${end}" data-step="1" aria-label="${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重加 1">+</button>
+                  </span>
+                </label>`).join('')}
               </div>
             </div>`).join('')}
           </div>
@@ -139,18 +160,39 @@
       summary();
     }
 
-    function cls(w) { return w >= 8 ? 'on high' : w > 0 ? 'on' : 'off'; }
+    function renderBoss() {
+      const zones = [0, 1, 2];
+      document.getElementById('boss').innerHTML = `
+        <img src="/icons/${encodeURIComponent(boss.name)}" alt="">
+        <table>
+          <tr><th></th>${zones.map((z) => `<th>区域 ${z + 1}</th>`).join('')}</tr>
+          <tr><th>等级 ≥</th>${zones.map((z) => `<td><span class="stepper"><input type="number" min="1" step="1" data-boss="levels" data-z="${z}" value="${boss.levels[z]}" aria-label="区域 ${z + 1} 打头目的等级"></span></td>`).join('')}</tr>
+          <tr><th>或剩余 ≤ 分钟</th>${zones.map((z) => `<td><span class="stepper"><input type="number" min="0" step="0.5" data-boss="minutes_left" data-z="${z}" value="${boss.minutes_left[z]}" aria-label="区域 ${z + 1} 剩余多少分钟就去打头目"></span></td>`).join('')}</tr>
+        </table>
+        <p class="note">等级够了，或者剩余时间不多了，机器人就会去骷髅按 E 召唤头目，这时头目优先于一切目标。头目追着你时不去祭坛（祭坛要站着不动），其他目标照去。打赢后（“头目…倒下了！”）不再召唤。</p>`;
+    }
+
+    document.getElementById('boss').addEventListener('change', (e) => {
+      const input = e.target.closest('input[data-boss]');
+      if (!input) return;
+      const value = Math.max(0, Number(input.value) || 0);
+      boss[input.dataset.boss][input.dataset.z] = value;
+      input.value = value;
+      markDirty(true);
+    });
+
+    function cls(icon) { const w = Math.max(icon.start, icon.end); return w >= 8 ? 'on high' : w > 0 ? 'on' : 'off'; }
 
     function summary() {
-      const on = groups.flatMap((g) => g.icons).filter((i) => i.weight > 0).length;
+      const on = groups.flatMap((g) => g.icons).filter((i) => Math.max(i.start, i.end) > 0).length;
       document.getElementById('summary').textContent = `当前会去 ${on} 种目标。`;
     }
 
-    function setWeight(card, value) {
+    function setWeight(card, end, value) {
       const icon = groups[card.dataset.g].icons[card.dataset.i];
-      icon.weight = Math.max(0, Number.isFinite(value) ? value : 0);
-      card.className = 'icon ' + cls(icon.weight);
-      card.querySelector('input').value = icon.weight;
+      icon[end] = Math.max(0, Number.isFinite(value) ? value : 0);
+      card.className = 'icon ' + cls(icon);
+      card.querySelector(`input[data-end="${end}"]`).value = icon[end];
       summary();
       markDirty(true);
     }
@@ -159,10 +201,11 @@
       const btn = e.target.closest('button[data-step]');
       if (!btn) return;
       const card = btn.closest('.icon');
-      setWeight(card, Number(card.querySelector('input').value) + Number(btn.dataset.step));
+      const end = btn.dataset.end;
+      setWeight(card, end, Number(card.querySelector(`input[data-end="${end}"]`).value) + Number(btn.dataset.step));
     });
     document.getElementById('groups').addEventListener('change', (e) => {
-      if (e.target.matches('input')) setWeight(e.target.closest('.icon'), Number(e.target.value));
+      if (e.target.matches('input[data-end]')) setWeight(e.target.closest('.icon'), e.target.dataset.end, Number(e.target.value));
     });
 
     function markDirty(on) {
@@ -175,12 +218,14 @@
 
     async function save() {
       const weights = {};
-      for (const icon of groups.flatMap((g) => g.icons)) if (icon.weight > 0) weights[icon.name] = icon.weight;
+      for (const icon of groups.flatMap((g) => g.icons)) {
+        if (Math.max(icon.start, icon.end) > 0) weights[icon.name] = icon.start === icon.end ? icon.start : [icon.start, icon.end];
+      }
       try {
         const res = await fetch('/api/targets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ weights }),
+          body: JSON.stringify({ weights, boss: { levels: boss.levels, minutes_left: boss.minutes_left } }),
         });
         const data = await res.json();
         if (data.status !== 'ok') throw new Error(data.error);

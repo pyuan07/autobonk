@@ -238,22 +238,29 @@ def test_targets_page_lists_every_icon_with_its_image_and_saves(tmp_path: Path):
         with urllib.request.urlopen(f"{base}/targets") as resp:
             assert "PokéBonk 地图目标" in resp.read().decode("utf-8")
         with urllib.request.urlopen(f"{base}/api/targets") as resp:
-            icons = [icon for group in json.loads(resp.read())["groups"] for icon in group["icons"]]
-        assert {"name": "符文祭坛", "weight": 10} in icons
-        assert {"name": "喵喵", "weight": 0} in icons
-        for icon in icons:
+            data = json.loads(resp.read())
+        icons = [icon for group in data["groups"] for icon in group["icons"]]
+        assert {"name": "符文祭坛", "start": 10, "end": 10} in icons
+        assert {"name": "喵喵", "start": 0, "end": 0} in icons
+        assert data["boss"] == {"name": "骷髅", "levels": [35, 60, 80], "minutes_left": [4, 8, 8]}
+        for icon in icons + [data["boss"]]:
             with urllib.request.urlopen(f"{base}/icons/{urllib.parse.quote(icon['name'])}") as resp:
                 assert resp.headers["Content-Type"] == "image/png"
 
         req = urllib.request.Request(
             f"{base}/api/targets",
-            data=json.dumps({"weights": {"精灵球": 5}}).encode(),
+            data=json.dumps({
+                "weights": {"精灵球": [0, 6], "符文祭坛": 10},
+                "boss": {"levels": [30, 60, 80], "minutes_left": [4, 8, 8]},
+            }).encode(),
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req) as resp:
             assert json.loads(resp.read())["status"] == "ok"
-        assert load_config(toml_path).targets == {"精灵球": 5}
-        assert load_config(toml_path).cards.weights == {"月之石": 10}
+        cfg = load_config(toml_path)
+        assert cfg.targets == {"精灵球": (0, 6), "符文祭坛": 10}
+        assert cfg.boss.levels == (30, 60, 80)
+        assert cfg.cards.weights == {"月之石": 10}
     finally:
         server.shutdown()
         server.server_close()

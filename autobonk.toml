@@ -34,12 +34,6 @@ target_ignore_s = 60
 stuck_s = 2.5
 sidestep_s = 0.6
 
-[targets.weights]
-# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes first, then the nearest;
-# 0 or unlisted = never. At an altar the bot stands in the ring; at anything else it presses E.
-# Each icon listed costs ~15 ms per step to look for, so list only the ones you want.
-"符文祭坛" = 10
-
 [record]
 # While the bot is paused (you are playing), every popup pick you make is appended here,
 # with all the cards offered, so your choices can be studied to set card weights.
@@ -175,3 +169,31 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "爱心印章" = -5
 "精神利刃" = -5
 "精神扭曲" = -5
+
+[targets.weights]
+# Map icons to walk to (edit in the weight editor that run.bat opens). The highest weight goes
+# first, then the nearest; 0 or unlisted = never. At an altar the bot stands in the ring; at
+# anything else it presses E. Each icon listed costs ~15 ms per step to look for.
+# Priority 10
+"卡比兽" = 10
+"毒球" = 10
+"礼物球" = 10
+"铁甲犀牛" = 10
+
+# Priority 9
+"矿堆" = 9
+
+# Priority 7
+"符文祭坛" = 7
+
+# Priority 6
+"双剑" = 6
+
+# Priority 5
+"精灵球" = 5
+
+[targets.boss]
+# The area boss (骷髅): summoned with E in zone N once the level reaches levels[N-1], or once
+# only minutes_left[N-1] are left; then it comes first. While it chases, altars are left.
+levels = [35, 60, 80]
+minutes_left = [4, 8, 8]

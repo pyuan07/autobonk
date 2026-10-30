@@ -19,6 +19,8 @@ CARD_KEY = re.compile(r"\[(\d)\]")
 # The progress bubble over a rune altar (or ore pile) the player stands in: a bare "29%".
 CHARGE = re.compile(r"\d{1,3}%")
 ZONE = re.compile(r"区域 \d+/\d+")
+# The area boss's banner once it is beaten: "头目水伊布倒下了！".
+BOSS_DOWN = re.compile(r"头目.+倒下了[!！]?")
 # Over a rune altar that can't be charged yet: "封印中・13秒后苏醒".
 SEALED = re.compile(r"封印中.(\d+)秒后苏醒")
 # The "还有 N 个图像未加载 [重试]" corner notice is not a popup.
@@ -55,6 +57,20 @@ class Observation:
     team_view: bool = False  # the team view covers the popup: its keys do nothing until it closes
     sealed_s: int | None = None  # an altar on screen is sealed for this many more seconds
     targets: tuple[tuple[str, Point], ...] = ()  # other icons asked for on the minimap, nearest first
+    level: int | None = None  # the player's level (HUD "Lv 35")
+    boss_down: bool = False  # the "头目…倒下了！" banner shows: the area boss is beaten
+
+    @property
+    def seconds_left(self) -> int | None:
+        if self.countdown is None:
+            return None
+        minutes, seconds = self.countdown.split(":")
+        return int(minutes) * 60 + int(seconds)
+
+    @property
+    def zone_index(self) -> int | None:
+        """1 for "区域 1/3"."""
+        return int(self.zone.split()[1].split("/")[0]) if self.zone else None
 
     @property
     def recognised(self) -> bool:
@@ -77,6 +93,8 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
         end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging,
         north_bearing(frame.minimap), read_zonemap(frame.zonemap, targets), zone, team_view,
         int(sealed.group(1)) if sealed else None, _minimap_targets(frame.minimap, targets),
+        next((int(texts[i + 1]) for i, t in enumerate(texts[:-1]) if t == "Lv" and texts[i + 1].isdigit()), None),
+        any(BOSS_DOWN.fullmatch(t) for t in texts),
     )
 
 

@@ -60,6 +60,7 @@ def main(argv: list[str] | None = None) -> None:
                     sidestep_s=config.sidestep_s,
                 ),
                 config.targets,
+                config.boss,
             ),
             step_capture=lambda: capture_frame(page, cdp, fast=True),
             watch=watch_player,

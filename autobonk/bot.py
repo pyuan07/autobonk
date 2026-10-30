@@ -32,6 +32,7 @@ DIRECTION_KEYS = (
 ALTAR_ARRIVED_PX = 14
 ALTAR = "符文祭坛"  # rune altars' name in [targets.weights]; every other name is an icon in autobonk.icons
 DEFAULT_TARGETS = {ALTAR: 10.0}
+BOSS = "骷髅"  # the area boss: E summons it (BossRule says when), then it chases the player
 INTERACT_KEY = "KeyE"  # at a target other than an altar (shop, chest...); without the money nothing happens
 INTERACT_WAIT_S = 1.5  # after E, a target still there with no popup or charging was not taken
 MAP_KEY = "Tab"  # held while exploring: the zone map shows, the game keeps running
@@ -73,6 +74,23 @@ class Hold:
 
 
 Command = ReleaseAll | Stop | Pause | Press | Click | Hold
+# A target's weight: fixed, or (at the zone's start, when its time is up), growing in between.
+Weight = float | tuple[float, float]
+
+
+@dataclass(frozen=True)
+class BossRule:
+    """Summon the area boss in zone N once the level reaches levels[N-1], or once only
+    minutes_left[N-1] are left; from then on it comes before everything else."""
+
+    levels: tuple[int, ...] = (35, 60, 80)
+    minutes_left: tuple[float, ...] = (4, 8, 8)
+
+    def ready(self, zone: int, level: int | None, seconds_left: int | None) -> bool:
+        i = min(zone, len(self.levels)) - 1
+        strong = level is not None and level >= self.levels[i]
+        late = seconds_left is not None and seconds_left <= self.minutes_left[i] * 60
+        return strong or late
 
 
 class Uniform(Protocol):
@@ -95,16 +113,23 @@ class Bot:
         unknown_screen_pause_s: float = 5.0,
         cards: CardPrefs = CardPrefs(),
         movement: Movement | None = None,
-        targets: Mapping[str, float] | None = None,
+        targets: Mapping[str, Weight] | None = None,
+        boss: BossRule | None = None,
     ):
         """`targets`: map icon name -> weight. The highest weight is walked to first, then the
-        nearest; 0 or less is never visited."""
+        nearest; 0 or less is never visited. `boss`: when to summon the area boss (骷髅); None never."""
         self._unknown_screen_pause_s = unknown_screen_pause_s
         self._cards = cards
         self._movement = movement or Movement()
         weights = DEFAULT_TARGETS if targets is None else targets
-        self._weights = {name: w for name, w in weights.items() if w > 0}
-        self._icons = tuple(name for name in self._weights if name != ALTAR)
+        self._weights = {name: w if isinstance(w, tuple) else (w, w) for name, w in weights.items()}
+        self._weights = {name: w for name, w in self._weights.items() if max(w) > 0 and name != BOSS}
+        self._boss = boss
+        self._icons = tuple(name for name in self._weights if name != ALTAR) + ((BOSS,) if boss else ())
+        self._now_weights: dict[str, float] = {}  # this step's weights
+        self._zone_seconds: int | None = None  # the zone's countdown when first seen: its whole time
+        self._boss_fight = False  # summoned and chasing: keep moving, no altars
+        self._boss_beaten = False
         self._held: frozenset[str] = frozenset()
         self._next_jump: float | None = None
         self._charging_since: float | None = None
@@ -164,6 +189,7 @@ class Bot:
         """Walk to the best target on the minimap (highest weight, then nearest), else explore.
         At an altar stand in the ring while it charges (up to the cap); at anything else press E.
         Sealed altars, ones still charging at the cap and targets E did nothing for are skipped a while."""
+        self._now_weights = self._weigh(observation)
         if observation.sealed_s is not None and not self._skipped(ALTAR, now):
             log.info("altar sealed for %d s: exploring meanwhile", observation.sealed_s)
             self._ignored[ALTAR] = now + observation.sealed_s
@@ -200,13 +226,34 @@ class Bot:
             commands = [Hold(keys)] + commands
         return commands
 
+    def _weigh(self, observation: Observation) -> dict[str, float]:
+        """This step's target weights: each grows from its start to its end weight as the zone's
+        time runs out. The boss outranks everything once BossRule says so; while it chases, no altars."""
+        if observation.zone != self._zone:
+            self._zone, self._visited, self._heading = observation.zone, set(), None
+            self._zone_seconds, self._boss_fight, self._boss_beaten = None, False, False
+        left = observation.seconds_left
+        if left is not None and (self._zone_seconds is None or left > self._zone_seconds):
+            self._zone_seconds = left
+        progress = 1 - left / self._zone_seconds if left is not None and self._zone_seconds else 0.0
+        weights = {name: start + (end - start) * progress for name, (start, end) in self._weights.items()}
+        if observation.boss_down and not self._boss_beaten:
+            log.info("area boss beaten")
+            self._boss_fight, self._boss_beaten = False, True
+        if self._boss_fight:
+            weights.pop(ALTAR, None)
+        elif self._boss and not self._boss_beaten and observation.zone_index:
+            if self._boss.ready(observation.zone_index, observation.level, left):
+                weights[BOSS] = math.inf
+        return {name: w for name, w in weights.items() if w > 0}
+
     def _candidates(self, found: list[tuple[str, T]], now: float) -> list[tuple[str, T]]:
-        return [(name, where) for name, where in found if name in self._weights and not self._skipped(name, now)]
+        return [(name, where) for name, where in found if name in self._now_weights and not self._skipped(name, now)]
 
     def _best(self, candidates: list[tuple[str, T]], origin: tuple[float, float]) -> tuple[str, T]:
         return max(
             candidates,
-            key=lambda c: (self._weights[c[0]], -math.hypot(c[1][0] - origin[0], c[1][1] - origin[1])),
+            key=lambda c: (self._now_weights[c[0]], -math.hypot(c[1][0] - origin[0], c[1][1] - origin[1])),
         )
 
     def _skipped(self, name: str, now: float) -> bool:
@@ -217,6 +264,9 @@ class Bot:
         if self._interacted is None or self._interacted[0] != name:
             log.info("at %s: pressing E", name)
             self._interacted = (name, now)
+            if name == BOSS:
+                log.info("area boss summoned: it chases us, so keep moving and leave the altars")
+                self._boss_fight = True
             return [Press(INTERACT_KEY)]
         if now - self._interacted[1] >= INTERACT_WAIT_S:
             log.info("%s: E did nothing (not enough money?), skipping for %g s", name, self._movement.target_ignore_s)
@@ -227,8 +277,6 @@ class Bot:
     def _explore(self, observation: Observation, now: float) -> frozenset[str]:
         """Nothing on the minimap: hold Tab and head for the best target on the zone map, else the
         nearest unvisited cell, turning the north-up bearing into minimap-up WASD."""
-        if observation.zone != self._zone:
-            self._zone, self._visited, self._heading = observation.zone, set(), None
         zone = observation.zonemap
         if zone:
             self._visited.add(_cell(zone.player))
