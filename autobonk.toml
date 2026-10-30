@@ -22,6 +22,10 @@ frame = "f9"
 steps_per_second = 10
 # Pause if the screen can't be recognised for this long.
 unknown_screen_pause_s = 5
+# During play, jump (Space) after a random wait in this range, in seconds.
+jump_interval_s = [0.8, 1.4]
+# Stand in a rune altar's ring at most this long while it charges, then move on.
+altar_charge_cap_s = 45
 
 [record]
 # While the bot is paused (you are playing), every popup pick you make is appended here,

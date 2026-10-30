@@ -3,10 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from autobonk.bot import Bot, Click, Pause, Press, ReleaseAll, Stop
+from autobonk.bot import Bot, Click, Hold, Movement, Pause, Press, ReleaseAll, Stop
 from autobonk.cards import CardPrefs
 from autobonk.config import load_config
 from autobonk.frames import Frame, load_frame
+from autobonk.perception import perceive
 
 FRAMES = Path(__file__).parent.parent / "fixtures" / "frames"
 
@@ -191,7 +192,7 @@ def test_banners_and_notices_are_not_popups(name):
     ],
 )
 def test_banners_followed_by_hud_buttons_are_not_popups(name):
-    assert Bot().step(load_frame(FRAMES / f"frame-20261030-{name}")) == []
+    assert perceive(load_frame(FRAMES / f"frame-20261030-{name}")).popup is None
 
 
 def popup(body: str) -> Frame:
@@ -209,3 +210,82 @@ def test_unknown_popup_without_options_pauses():
     frame = popup("<h1>新事件！</h1><button>确定</button>")
 
     assert Bot().step(frame) == [ReleaseAll(), Pause("unknown popup: 新事件！")]
+
+
+def run_frame(name: str, timestamp: float) -> Frame:
+    """A frame from the 2026-10-30 run (in play, minimap saved) at a chosen time."""
+    return replace(load_frame(FRAMES / f"frame-20261030-{name}"), timestamp=timestamp)
+
+
+@pytest.mark.parametrize(
+    "name, keys",
+    [
+        ("155200-971", {"KeyD"}),  # altar right and a little up
+        ("155220-116", {"KeyW"}),  # straight up: minimap-up is always W
+        ("155651-230", {"KeyS", "KeyA"}),  # down-left
+        ("155820-313", {"KeyS"}),  # straight down (cyan ring)
+    ],
+)
+def test_walks_toward_the_nearest_rune_altar(name, keys):
+    assert Bot().step(run_frame(name, 100.0)) == [Hold(frozenset(keys))]
+
+
+def test_holding_the_same_direction_is_not_repeated():
+    bot = Bot()
+    bot.step(run_frame("155220-116", 100.0))
+
+    assert bot.step(run_frame("155220-116", 100.1)) == []
+
+
+def test_stands_still_in_the_ring_while_the_altar_charges():
+    bot = Bot()
+    bot.step(run_frame("155220-116", 100.0))
+
+    assert bot.step(run_frame("155222-698", 100.1)) == [Hold(frozenset())]  # charging 8%
+
+
+def test_gives_up_on_an_altar_that_charges_longer_than_the_cap():
+    bot = Bot(movement=Movement(altar_charge_cap_s=45))
+    bot.step(run_frame("155222-698", 100.0))  # charging starts
+    bot.step(run_frame("155227-456", 144.0))
+
+    # Past the cap the altar is ignored (no steering back onto it) until the bubble goes away.
+    assert holds(bot.step(run_frame("155227-456", 146.0))) == []
+    assert holds(bot.step(run_frame("155220-116", 147.0))) == [Hold(frozenset({"KeyW"}))]
+
+
+def holds(commands):
+    return [command for command in commands if isinstance(command, Hold)]
+
+
+def test_popup_releases_movement_and_steering_resumes_after():
+    bot = Bot()
+    bot.step(run_frame("155220-116", 100.0))
+    assert bot.step(replace(LEVEL_UP, timestamp=100.1))[0] == ReleaseAll()
+
+    assert bot.step(run_frame("155220-116", 100.2)) == [Hold(frozenset({"KeyW"}))]
+
+
+class FixedIntervals:
+    def __init__(self, *intervals: float):
+        self._intervals = list(intervals)
+
+    def uniform(self, low: float, high: float) -> float:
+        interval = self._intervals.pop(0)
+        assert low <= interval <= high
+        return interval
+
+
+def test_jumps_at_random_intervals_while_playing():
+    bot = Bot(movement=Movement(jump_interval_s=(0.8, 1.4), rng=FixedIntervals(1.0, 1.3, 0.9, 1.0)))
+    times = [100.0 + 0.1 * i for i in range(40)]
+    jumps = [t for t in times if Press("Space") in bot.step(run_frame("155925-987", t))]
+
+    assert [round(t - 100, 1) for t in jumps] == [1.0, 2.3, 3.2]
+
+
+def test_no_jumping_in_popups():
+    bot = Bot(movement=Movement(rng=FixedIntervals(0.8, 0.8)))
+    bot.step(run_frame("155313-554", 100.0))  # 稀有未知图腾祭坛 reward popup is open in this frame
+
+    assert Press("Space") not in bot.step(run_frame("155313-554", 101.0))

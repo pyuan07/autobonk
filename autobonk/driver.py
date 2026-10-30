@@ -21,6 +21,11 @@ class KeyboardDriver:
         self._held: set[str] = set()
 
     def hold(self, keys: Iterable[str]) -> None:
+        """Hold exactly `keys`: release held keys not among them, press the new ones."""
+        keys = set(keys)
+        for key in self._held - keys:
+            self._keyboard.up(key)
+            self._held.discard(key)
         for key in keys:
             if key not in self._held:
                 self._keyboard.down(key)

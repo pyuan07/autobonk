@@ -8,7 +8,7 @@ from pathlib import Path
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-from autobonk.bot import Bot
+from autobonk.bot import Bot, Movement
 from autobonk.browser import launch
 from autobonk.choices import DRAIN_INPUTS_SCRIPT, RECORD_INPUTS_SCRIPT, ChoiceLog, Input
 from autobonk.config import load_config
@@ -49,7 +49,11 @@ def main(argv: list[str] | None = None) -> None:
             capture=lambda: capture_frame(page, cdp),
             recorder=FrameRecorder(config.frames_dir),
             driver=driver,
-            bot=Bot(config.unknown_screen_pause_s, config.cards),
+            bot=Bot(
+                config.unknown_screen_pause_s,
+                config.cards,
+                Movement(config.jump_interval_s, config.altar_charge_cap_s),
+            ),
             step_capture=lambda: capture_frame(page, cdp, fast=True),
             watch=watch_player,
         )

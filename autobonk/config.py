@@ -21,6 +21,8 @@ class Config:
     cards: CardPrefs
     choices_file: Path
     active_pokemon: str | None = None
+    jump_interval_s: tuple[float, float] = (0.8, 1.4)
+    altar_charge_cap_s: float = 45.0
 
 
 def load_config(path: Path) -> Config:
@@ -64,4 +66,6 @@ def load_config(path: Path) -> Config:
         ),
         choices_file=base / data.get("record", {}).get("choices_file", "logs/choices.jsonl"),
         active_pokemon=active_pokemon,
+        jump_interval_s=tuple(bot.get("jump_interval_s", (0.8, 1.4))),
+        altar_charge_cap_s=bot.get("altar_charge_cap_s", 45),
     )

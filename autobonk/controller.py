@@ -6,9 +6,9 @@ used from the thread that created it, so callbacks only `submit()` and the main 
 
 import logging
 import queue
-from typing import Callable, Literal, Protocol
+from typing import Callable, Iterable, Literal, Protocol
 
-from autobonk.bot import Click, Command, Pause, Press, ReleaseAll, Stop
+from autobonk.bot import Click, Command, Hold, Pause, Press, ReleaseAll, Stop
 from autobonk.frames import Frame, FrameRecorder
 
 log = logging.getLogger(__name__)
@@ -18,6 +18,8 @@ Event = Literal["toggle_pause", "save_frame"]
 
 class Driver(Protocol):
     def release_all(self) -> None: ...
+
+    def hold(self, keys: Iterable[str]) -> None: ...
 
     def press(self, key: str) -> None: ...
 
@@ -91,6 +93,8 @@ class Controller:
         log.info("-> %s", command)
         if isinstance(command, ReleaseAll):
             self._driver.release_all()
+        elif isinstance(command, Hold):
+            self._driver.hold(command.keys)
         elif isinstance(command, Press):
             self._driver.press(command.key)
         elif isinstance(command, Click):

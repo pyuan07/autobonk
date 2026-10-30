@@ -7,12 +7,15 @@ from typing import Literal
 
 from autobonk.cards import Card
 from autobonk.frames import Frame
+from autobonk.minimap import Point, find_altars
 
 EndScreen = Literal["win", "lose"]
 
 END_TITLES: dict[str, EndScreen] = {"胜利": "win", "你倒下了": "lose"}
 COUNTDOWN = re.compile(r"\d{1,2}:\d{2}")
 CARD_KEY = re.compile(r"\[(\d)\]")
+# The progress bubble over a rune altar (or ore pile) the player stands in: a bare "29%".
+CHARGE = re.compile(r"\d{1,3}%")
 # The "还有 N 个图像未加载 [重试]" corner notice is not a popup.
 IGNORED_BUTTONS = {"重试"}
 # Buttons that close a popup without choosing anything.
@@ -37,6 +40,8 @@ class Observation:
     end_screen: EndScreen | None
     countdown: str | None
     popup: Popup | None = None
+    altars: tuple[Point, ...] = ()  # rune altars on the minimap, nearest first
+    charging: bool = False  # a progress bubble shows: stay put until it finishes
 
     @property
     def recognised(self) -> bool:
@@ -49,7 +54,9 @@ def perceive(frame: Frame) -> Observation:
     texts = [text for _, text in nodes]
     end_screen = next((END_TITLES[t.rstrip("!！")] for t in texts if t.rstrip("!！") in END_TITLES), None)
     countdown = next((t for t in texts if COUNTDOWN.fullmatch(t)), None)
-    return Observation(end_screen, countdown, _popup(nodes, parsed.scopes))
+    altars = tuple(sorted(find_altars(frame.minimap), key=lambda p: p[0] ** 2 + p[1] ** 2))
+    charging = any(tag == "span" and CHARGE.fullmatch(text) for tag, text in nodes)
+    return Observation(end_screen, countdown, _popup(nodes, parsed.scopes), altars, charging)
 
 
 def _popup(nodes: list[tuple[str, str]], scopes: list[tuple[int, ...]]) -> Popup | None:

@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "PokéBonk autopilot"
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=2",
+    "pillow>=11",
     "playwright>=1.50",
     "pynput>=1.7",
 ]
@@ -16,6 +18,9 @@ autobonk = "autobonk.__main__:main"
 
 [tool.setuptools]
 packages = ["autobonk"]
+
+[tool.setuptools.package-data]
+autobonk = ["*.json", "*.html", "*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

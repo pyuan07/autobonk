@@ -82,3 +82,12 @@ recorder should also save visibility-aware text (`innerText`) per frame.
 - Tab held in a normal zone (only the sanctuary map was captured)
 - A top-down frame with several icon types on the minimap
 - Icon reference crops at 1600×900 for the taxonomy
+
+## Minimap facts (user, 2026-10-30)
+
+- The minimap rotates with the camera, but **W always moves toward minimap-up** (so minimap steering needs no heading).
+- **Red dot = enemy, yellow dot = elite enemy.**
+- The Tab zone map is north-up and does not rotate; it shows far more icons than the minimap.
+- The camera turns only when the player drags left/right; the bot never drags, so the heading is fixed for a run.
+  Read it from the minimap's 北 rim marker to map Tab-map (north-up) directions onto WASD.
+- Holding Tab keeps the game running (you can move and be hit) and the minimap stays visible; the map shows only while held.
