@@ -30,6 +30,8 @@ DIRECTION_KEYS = (
 ALTAR_ARRIVED_PX = 14
 MAP_KEY = "Tab"  # held while exploring: the zone map shows, the game keeps running
 GRID = 8  # the zone is explored as GRID x GRID cells; edge cells are never targets
+ALTAR_PROGRESS_PX = 3  # getting this much closer to an altar (minimap pixels) counts as progress
+ZONE_PROGRESS = 0.01  # moving this far on the zone map (fraction of the zone) counts as progress
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,8 @@ class Uniform(Protocol):
 class Movement:
     jump_interval_s: tuple[float, float] = (0.8, 1.4)
     altar_charge_cap_s: float = 45.0
+    stuck_s: float = 2.5  # no progress toward the target this long: sidestep
+    sidestep_s: float = 0.6
     rng: Uniform = field(default_factory=random.Random)
 
 
@@ -92,6 +96,10 @@ class Bot:
         self._zone: str | None = None
         self._visited: set[tuple[int, int]] = set()  # zone-map cells the player has been in
         self._heading: float | None = None  # exploring toward this compass bearing (north-up)
+        self._bearing: float | None = None  # minimap bearing being walked
+        self._progress: tuple[object, float] | None = None  # (last progress mark, when)
+        self._sidestep: tuple[frozenset[str], float] | None = None  # (keys, until)
+        self._sidestep_left = True
         self._unrecognised_since: float | None = None
         self._last_state: str | None = None
         self._answered: tuple[str, float] | None = None  # (popup title, when)
@@ -148,9 +156,11 @@ class Bot:
         elif observation.altars:
             x, y = observation.altars[0]
             if math.hypot(x, y) > ALTAR_ARRIVED_PX:
-                keys = _direction(math.degrees(math.atan2(x, -y)))
+                self._bearing = math.degrees(math.atan2(x, -y))
+                keys = _direction(self._bearing)
         else:
             keys = self._explore(observation)
+        keys = self._unstick(keys, observation, now)
         if keys == self._held:
             return []
         self._held = keys
@@ -171,7 +181,38 @@ class Bot:
             self._heading = math.degrees(math.atan2(dx, -dy))
         if self._heading is None or observation.north is None:
             return frozenset({MAP_KEY})
-        return _direction(observation.north + self._heading) | {MAP_KEY}
+        self._bearing = observation.north + self._heading
+        return _direction(self._bearing) | {MAP_KEY}
+
+    def _unstick(self, keys: frozenset[str], observation: Observation, now: float) -> frozenset[str]:
+        """Walking without progress for `stuck_s`: step left (then right, alternating) for `sidestep_s`."""
+        if self._sidestep:
+            sidestep, until = self._sidestep
+            if now < until:
+                return sidestep | (keys & {MAP_KEY})
+            self._sidestep, self._progress = None, None
+        if not keys - {MAP_KEY} or self._bearing is None:
+            self._progress = None
+            return keys
+        if observation.altars:
+            mark: object = math.hypot(*observation.altars[0])
+            progressed = lambda last: last - mark >= ALTAR_PROGRESS_PX  # noqa: E731
+        elif observation.zonemap:
+            mark = observation.zonemap.player
+            progressed = lambda last: _distance(last, mark) >= ZONE_PROGRESS  # noqa: E731
+        else:
+            return keys
+        if self._progress is None or type(self._progress[0]) is not type(mark) or progressed(self._progress[0]):
+            self._progress = (mark, now)
+            return keys
+        if now - self._progress[1] < self._movement.stuck_s:
+            return keys
+        side = -90 if self._sidestep_left else 90
+        self._sidestep_left = not self._sidestep_left
+        sidestep = _direction(self._bearing + side)
+        log.info("stuck for %g s: sidestepping %s", self._movement.stuck_s, "left" if side < 0 else "right")
+        self._sidestep = (sidestep, now + self._movement.sidestep_s)
+        return sidestep | (keys & {MAP_KEY})
 
     def _nearest_unvisited(self, player: Position) -> Position:
         inner = [(col, row) for col in range(1, GRID - 1) for row in range(1, GRID - 1)]

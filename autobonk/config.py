@@ -23,6 +23,8 @@ class Config:
     active_pokemon: str | None = None
     jump_interval_s: tuple[float, float] = (0.8, 1.4)
     altar_charge_cap_s: float = 45.0
+    stuck_s: float = 2.5
+    sidestep_s: float = 0.6
 
 
 def load_config(path: Path) -> Config:
@@ -68,4 +70,6 @@ def load_config(path: Path) -> Config:
         active_pokemon=active_pokemon,
         jump_interval_s=tuple(bot.get("jump_interval_s", (0.8, 1.4))),
         altar_charge_cap_s=bot.get("altar_charge_cap_s", 45),
+        stuck_s=bot.get("stuck_s", 2.5),
+        sidestep_s=bot.get("sidestep_s", 0.6),
     )

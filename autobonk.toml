@@ -26,6 +26,10 @@ unknown_screen_pause_s = 5
 jump_interval_s = [0.8, 1.4]
 # Stand in a rune altar's ring at most this long while it charges, then move on.
 altar_charge_cap_s = 45
+# Walking with no progress toward the target for this long counts as stuck:
+# step left (next time right) for sidestep_s, then walk on.
+stuck_s = 2.5
+sidestep_s = 0.6
 
 [record]
 # While the bot is paused (you are playing), every popup pick you make is appended here,

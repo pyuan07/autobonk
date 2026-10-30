@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> None:
             bot=Bot(
                 config.unknown_screen_pause_s,
                 config.cards,
-                Movement(config.jump_interval_s, config.altar_charge_cap_s),
+                Movement(config.jump_interval_s, config.altar_charge_cap_s, config.stuck_s, config.sidestep_s),
             ),
             step_capture=lambda: capture_frame(page, cdp, fast=True),
             watch=watch_player,

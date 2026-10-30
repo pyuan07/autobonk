@@ -336,3 +336,27 @@ def test_an_altar_on_the_minimap_takes_over_and_lets_go_of_tab():
     bot.step(with_maps("155925-987", minimap_of="155925-987", zonemap=ZONEMAP))
 
     assert holds(bot.step(run_frame("170001-415", 100.1))) == [Hold(frozenset({"KeyW"}))]
+
+
+def test_stuck_walking_to_an_altar_sidesteps_then_walks_on():
+    bot = Bot(movement=Movement(stuck_s=2.5, sidestep_s=0.6))
+    steps = {round(t, 1): holds(bot.step(run_frame("155220-116", 100.0 + t))) for t in [i / 10 for i in range(40)]}
+
+    assert steps[0.0] == [Hold(frozenset({"KeyW"}))]
+    assert steps[2.5] == [Hold(frozenset({"KeyA"}))]  # altar no closer for 2.5 s: step left
+    assert steps[3.1] == [Hold(frozenset({"KeyW"}))]  # then back on course
+
+
+def test_sidesteps_alternate_left_and_right():
+    bot = Bot(movement=Movement(stuck_s=2.5, sidestep_s=0.6))
+    sides = [h.keys for t in range(80) for h in holds(bot.step(run_frame("155220-116", 100.0 + t / 10)))]
+
+    assert sides[:4] == [{"KeyW"}, {"KeyA"}, {"KeyW"}, {"KeyD"}]
+
+
+def test_moving_closer_is_not_stuck():
+    bot = Bot(movement=Movement(stuck_s=2.5))
+    bot.step(run_frame("155214-804", 100.0))  # altar 51 px away
+    bot.step(run_frame("155220-116", 102.0))  # 47 px: progress, the stuck timer restarts
+
+    assert holds(bot.step(run_frame("155220-116", 104.0))) == []  # only 2 s without progress
