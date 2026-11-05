@@ -37,6 +37,8 @@ Opens Chrome on `https://pokebonk.com/` at a 1600×900 viewport with its dedicat
 
 ## Architecture
 
+For an in-depth breakdown of all internal mechanics, perception pipelines, state machines, math models, and edge-case handling (in Chinese), see [DETAILS.md](file:///e:/Projects/autobonk/DETAILS.md).
+
 ```
 autobonk/
 ├── commands.py          # Command primitives (Press, Hold, Click, ReleaseAll, Stop, Pause)

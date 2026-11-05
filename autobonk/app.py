@@ -1,5 +1,6 @@
 """Application runner: wires browser, controller, dashboard, hotkeys, and main loop."""
 
+import contextlib
 import logging
 import threading
 import time
@@ -8,16 +9,16 @@ from pathlib import Path
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-from autobonk.config import Config, load_config
+from autobonk.config import load_config
 from autobonk.dashboard.hub import hub
 from autobonk.dashboard.server import run_editor
-from autobonk.runtime.frames import Frame, FrameRecorder, capture_frame
 from autobonk.perception.dom import perceive
 from autobonk.policy.bot import Bot
 from autobonk.runtime.browser import launch
 from autobonk.runtime.choices import DRAIN_INPUTS_SCRIPT, RECORD_INPUTS_SCRIPT, ChoiceLog, Input
 from autobonk.runtime.controller import Controller
 from autobonk.runtime.driver import KeyboardDriver
+from autobonk.runtime.frames import Frame, FrameRecorder, capture_frame
 from autobonk.runtime.hotkeys import start_hotkeys
 
 log = logging.getLogger("autobonk")
@@ -56,6 +57,9 @@ def run(config_path: Path = Path("autobonk.toml"), open_dashboard: bool = False)
             banish_threshold=config.banish_threshold,
             reroll_threshold=config.reroll_threshold,
             skip_threshold=config.skip_threshold,
+            plan_fallback_reroll_threshold=config.plan_fallback_reroll_threshold,
+            sub_target_base_allowance=config.sub_target_base_allowance,
+            sub_target_weight_factor=config.sub_target_weight_factor,
         )
 
         controller = Controller(
@@ -67,6 +71,7 @@ def run(config_path: Path = Path("autobonk.toml"), open_dashboard: bool = False)
             watch=watch_player,
             dashboard_hub=hub,
         )
+        controller.set_config_path(config_path)
 
         listener = start_hotkeys({
             config.pause_hotkey: lambda: controller.submit("toggle_pause"),
@@ -97,8 +102,6 @@ def run(config_path: Path = Path("autobonk.toml"), open_dashboard: bool = False)
         finally:
             listener.stop()
             for cleanup in (driver.release_all, context.close):
-                try:
+                with contextlib.suppress(PlaywrightError):
                     cleanup()
-                except PlaywrightError:
-                    pass
         log.info("Bye.")

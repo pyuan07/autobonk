@@ -47,6 +47,9 @@ def match_many(image: np.ndarray, templates: list[np.ndarray]) -> list[np.ndarra
         return []
     height, width = image.shape[:2]
     h, w = templates[0].shape[:2]
+    if any(t.shape[:2] != (h, w) for t in templates):
+        # The shared window statistics assume one size; mixed sizes give garbage scores.
+        raise ValueError(f"match_many needs same-sized templates, got {sorted({t.shape[:2] for t in templates})}")
     n = h * w * 3
     shape = (_fast_length(height), _fast_length(width))
 

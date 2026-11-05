@@ -1,7 +1,7 @@
 """Reads the floating zone map (canvas.bm-cv, 738x738, north-up), shown only while Tab is held."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 import numpy as np
 
@@ -37,7 +37,7 @@ def read_zonemap(png: bytes, targets: Sequence[str] = ()) -> ZoneMap | None:
     if player is None:
         return None
     altars = tuple(_position(x, y) for x, y in find_icons(image, ALTAR_TEMPLATE, ALTAR_MATCH, ICON_STEP))
-    found = tuple((name, _position(x, y)) for name, (x, y) in find_targets(image, targets))
+    found = tuple((name, _position(x, y)) for name, (x, y) in find_targets(image, targets, step=ICON_STEP))
     return ZoneMap(player, altars, found)
 
 

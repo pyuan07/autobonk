@@ -128,3 +128,77 @@ def test_without_a_minimap_canvas_the_frame_has_no_minimap(tmp_path):
     assert load_frame(path).minimap == b""
     assert frame.zonemap == b""
     assert not (tmp_path / (path.name + ".zonemap.png")).exists()
+
+
+def test_in_plan_cards_parsed_from_actual_frame():
+    from pathlib import Path
+
+    from autobonk.perception.dom import perceive
+    frame_path = Path("fixtures/frames/frame-20261031-140201-536")
+    if not (frame_path.parent / (frame_path.name + ".html")).exists():
+        return
+    frame = load_frame(frame_path)
+    obs = perceive(frame)
+    assert obs.popup is not None
+    cards = obs.popup.cards
+    assert len(cards) == 4
+    # Card 1: 电喙 (not in plan)
+    assert cards[0].name == "电喙"
+    assert cards[0].in_plan is False
+    # Card 2: 鸣雷风暴 (in plan)
+    assert cards[1].name == "鸣雷风暴"
+    assert cards[1].in_plan is True
+    # Card 3: 全满药 (in plan)
+    assert cards[2].name == "全满药"
+    assert cards[2].in_plan is True
+    # Card 4: 防御增强剂 (not in plan)
+    assert cards[3].name == "防御增强剂"
+    assert cards[3].in_plan is False
+
+
+def test_sanctuary_frame_zone_and_pips_parsed():
+    from pathlib import Path
+
+    from autobonk.perception.dom import perceive
+    frame_path = Path("fixtures/frames/frame-20261031-153043-487")
+    if not (frame_path.parent / (frame_path.name + ".html")).exists():
+        return
+    frame = load_frame(frame_path)
+    obs = perceive(frame)
+    assert obs.zone == "森林圣地"
+    assert obs.zone_index == 4
+    assert obs.total_zones == 4
+    assert obs.is_sanctuary is True
+    assert len(obs.altars) == 1
+    assert abs(obs.altars[0][0] - (-1)) <= 3 and abs(obs.altars[0][1] - (-34)) <= 3
+
+
+def test_storm_coast_sanctuary_frame():
+    from pathlib import Path
+
+    from autobonk.perception.dom import perceive
+    frame_path = Path("fixtures/frames/frame-20261028-022814-797")
+    if not (frame_path.parent / (frame_path.name + ".html")).exists():
+        return
+    frame = load_frame(frame_path)
+    obs = perceive(frame)
+    assert obs.zone == "雷鸣角"
+    assert obs.zone_index == 4
+    assert obs.total_zones == 4
+    assert obs.is_sanctuary is True
+    assert obs.prompt == ("E", "触碰圣地")
+
+
+def test_team_full_ally_join_modal_parsed_as_popup():
+    from pathlib import Path
+
+    from autobonk.perception.dom import perceive
+    frame_path = Path("fixtures/frames/frame-20261101-215615-503")
+    if not (frame_path.parent / (frame_path.name + ".html")).exists():
+        return
+    frame = load_frame(frame_path)
+    obs = perceive(frame)
+    assert obs.popup is not None
+    assert "想加入你的队伍" in obs.popup.title
+    assert len(obs.popup.cards) == 4
+    assert any("放生新来的" in d for d in obs.popup.cards[-1].details)

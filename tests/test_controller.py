@@ -20,7 +20,7 @@ class FakeDriver:
     def press(self, key):
         self.calls.append(f"press {key}")
 
-    def click(self, text):
+    def click(self, text, selector=None):
         self.calls.append(f"click {text}")
 
 
@@ -137,6 +137,19 @@ def test_end_screen_stops_the_loop_with_keys_released(tmp_path, caplog):
     assert "STOPPED (win)" in caplog.text
 
 
+def test_end_screen_auto_restarts_in_controller(tmp_path):
+    win_frame = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-023009-523")
+    controller, driver, _ = make_controller(tmp_path, capture=lambda: win_frame, bot=Bot(auto_restart="always"))
+    controller.submit("toggle_pause")
+    controller.poll()
+    driver.calls.clear()
+
+    controller.tick()
+
+    assert not controller.paused
+    assert driver.calls == ["release_all", "click 再来一次"]
+
+
 def test_pressed_card_key_reaches_the_driver_after_keys_are_released(tmp_path):
     level_up = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-022221-064")
     cards = CardPrefs(weights={"双翼": 10})
@@ -165,7 +178,7 @@ def test_clicked_text_reaches_the_driver(tmp_path):
 
 def test_failed_driver_command_pauses_instead_of_crashing(tmp_path, caplog):
     class BrokenClickDriver(FakeDriver):
-        def click(self, text):
+        def click(self, text, selector=None):
             raise TimeoutError("not visible")
 
     hypno = load_frame(Path(__file__).parent.parent / "fixtures" / "frames" / "frame-20261028-022445-954")
@@ -219,3 +232,22 @@ def test_a_bot_pause_saves_the_frame_it_could_not_handle(tmp_path):
     assert controller.paused
     [json_file] = tmp_path.glob("*.json")
     assert load_frame(json_file.with_suffix("")) == frame
+
+
+def test_controller_hot_reload_updates_bot_config(tmp_path):
+    import os
+    import time
+    cfg = tmp_path / "autobonk.toml"
+    cfg.write_text('[cards]\nweights = {"双翼" = 5.0}\n\n[targets.weights]\n"宝箱" = 3.0\n', encoding="utf-8")
+    bot = Bot()
+    controller, _, _ = make_controller(tmp_path, bot=bot)
+    controller.set_config_path(cfg)
+    assert controller._config_path == cfg
+
+    time.sleep(0.05)
+    cfg.write_text('[cards]\nweights = {"双翼" = 9.0}\n\n[targets.weights]\n"宝箱" = 20.0\n', encoding="utf-8")
+    future = time.time() + 5
+    os.utime(cfg, (future, future))
+    controller.poll()
+    assert bot._popups.cards.weights.get("双翼") == 9.0
+    assert bot._target_selector._weights.get("宝箱") == (20.0, 20.0)

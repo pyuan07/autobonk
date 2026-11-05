@@ -37,6 +37,18 @@ sidestep_s = 0.6
 # Weight remains the main priority; 0.2 allows a nearby weight-9 target to beat a far-away weight-10 target.
 # Set to 0 to only consider distance as a tie-breaker.
 distance_factor = 0.2
+# Wayside sub-target detour budget: max_detour = sub_target_base_allowance + sub_target_weight_factor * weight
+# Allows picking up instant items (coins, balls) en route to main target without deviating too far.
+# base_allowance: minimum detour in pixels allowed for any positive-weight item.
+# weight_factor: additional pixels of detour allowed per 1.0 unit of item weight.
+sub_target_base_allowance = 22.0
+sub_target_weight_factor = 8.0
+# Auto restart new game on end screen ("always", "win", "lose", "never").
+auto_restart = "always"
+# Maximum number of runs to play before stopping (0 = unlimited).
+max_runs = 0
+# Maximum seconds to tolerate loading/transition screens after restarting before pausing.
+restart_load_s = 20.0
 
 [record]
 # While the bot is paused (you are playing), every popup pick you make is appended here,
@@ -44,12 +56,13 @@ distance_factor = 0.2
 choices_file = "logs/choices.jsonl"
 
 [cards]
-active_pokemon = "超梦"
 # How choice popups are answered: level-up, item choice, fossil ruins/blessing, Porygon, Snorlax, Ditto.
 # Card names exactly as the game shows them. Positive weight = prefer, negative = avoid, unlisted = 0.
 # The highest weight wins; equal weights fall back to rarity_order, then leftmost card.
 # Stat blessings: "+伤害" weighs every "+N% 伤害" roll, whatever the number.
 rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
+# When none of the offered cards are in your plan ("在你的计划中"), reroll if best card weight < this
+plan_fallback_reroll_threshold = 7.0
 
 [cards.weights]
 # Baseline weights shared across all Pokémon (items, vitamins, general stats)
@@ -58,6 +71,8 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "心之水滴" = 10
 "招式学习器盒" = 10
 "甲壳化石" = 10
+"觉醒之石" = 10
+"ＰＰ单项全补剂" = 10
 
 # Priority 9
 "+幸运" = 9
@@ -68,7 +83,6 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "棱镜镭射" = 9
 "精神击破" = 9
 "精神突进" = 9
-"觉醒之石" = 9
 "讲究眼镜" = 9
 "ＰＰ单项小补剂" = 9
 "ＰＰ多项全补剂" = 9
@@ -77,11 +91,12 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 # Priority 8
 "+伤害" = 8
 "+攻击速度" = 8
-"+经验" = 8
 "+速度" = 8
 "伤害" = 8
+"光之石" = 8
 "大师球" = 8
 "大葱" = 8
+"彗星碎片" = 8
 "日之石" = 8
 "暗之石" = 8
 "月之石" = 8
@@ -92,6 +107,7 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "金刚宝珠" = 8
 
 # Priority 7
+"+经验" = 7
 "+范围" = 7
 "代币盒" = 7
 "充电电池" = 7
@@ -118,6 +134,7 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "戏法空间" = 5
 "气球" = 5
 "特攻增强剂" = 5
+"白金宝珠" = 5
 "白雾" = 5
 "锐利之爪" = 5
 "预知未来" = 5
@@ -171,79 +188,13 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "精神扭曲" = -5
 "谜芝果" = -5
 "贝壳化石" = -5
-"速度增强剂" = -5
-"速度强化" = -5
-"金珠" = -5
-"防御增强剂" = -5
-"防御强化" = -5
-"附着针" = -5
-"ＨＰ增强剂" = -5
-"ＰＰ多项小补剂" = -5
-
-[cards.pokemon."超梦"]
-# Specific skill priorities and overrides for 超梦
-# Priority 9
-"基因霸权" = 9
-"幻象光线" = 9
-"棱镜镭射" = 9
-"精神击破" = 9
-"精神突进" = 9
-
-# Priority 6
-"星星沙子" = 6
-"ＰＰ提升剂" = 6
-
-# Priority 5
-"广域战力" = 5
-"弯曲的汤匙" = 5
-"戏法空间" = 5
-"白雾" = 5
-"预知未来" = 5
-
-# Priority 2
-"诅咒薰香" = 2
-
-# Neutral (0): ignore the shared weight
-"经验糖果" = 0
-
-# Avoid (-1)
-"丝绸围巾" = -1
-"力量头带" = -1
-"奇迹种子" = -1
-"妖精之羽" = -1
-"木炭" = -1
-"柔软沙子" = -1
-"破旧钓竿" = -1
-"硬石头" = -1
-"神秘水滴" = -1
-"银粉" = -1
-"锐利鸟嘴" = -1
-"龙之牙" = -1
-
-# Avoid (-5)
-"MissingNo." = -5
-"力量强化" = -5
-"命中强化" = -5
-"好伤药" = -5
-"宝可追踪" = -5
-"屏障" = -5
-"投球" = -5
-"攻击增强剂" = -5
-"机变骰子" = -5
-"波导弹" = -5
-"爱心印章" = -5
-"特防增强剂" = -5
-"白银香水" = -5
-"离洞绳" = -5
-"精神利刃" = -5
-"精神扭曲" = -5
-"谜芝果" = -5
 "超级之星" = -5
 "速度增强剂" = -5
 "速度强化" = -5
 "金珠" = -5
 "防御增强剂" = -5
 "防御强化" = -5
+"附着针" = -5
 "ＨＰ增强剂" = -5
 "ＰＰ多项小补剂" = -5
 
@@ -259,12 +210,15 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 "卡比兽" = 10
 "百变怪" = [0, 10]
 "铁甲犀牛" = 10
-"绿水晶" = 9
-"符文祭坛" = [8, 7]
+"符文祭坛" = [8, 6]
 "精灵球" = [3, 8]
+"绿水晶" = 8
+"吉利蛋" = 8
+"探索未知" = [8, 6]
+"牢笼" = [0, 7]
 "喵喵" = [0, 7]
+"引梦貘人" = [3, 7]
 "耿鬼" = [3, 7]
-"牢笼" = [0, 6]
 "双剑" = 6
 "磁铁" = [0, 6]
 "多边兽" = 6
@@ -272,5 +226,5 @@ rarity_order = ["传说", "史诗", "招式", "稀有", "少见", "普通"]
 [targets.boss]
 # The area boss (骷髅): summoned with E in zone N once the level reaches levels[N-1], or once
 # only minutes_left[N-1] are left; then it comes first. While it chases, altars are left.
-levels = [35, 60, 80]
-minutes_left = [4, 8, 8]
+levels = [999, 999, 999]
+minutes_left = [4, 7, 7]

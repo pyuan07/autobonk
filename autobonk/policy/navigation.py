@@ -6,15 +6,21 @@ from typing import Protocol
 
 from autobonk.commands import Command, Press
 from autobonk.game import (
+    ALTAR,
     ALTAR_PROGRESS_PX,
+    BOSS,
     DIRECTION_KEYS,
     INTERACT_KEY,
     INTERACT_RETRY_S,
     INTERACT_WAIT_S,
     JUMP_KEY,
     MAP_KEY,
-    PORTAL_PROMPTS,
+    PORTAL,
+    SANCTUARY,
+    SANCTUARY_PROMPTS,
     ZONE_PROGRESS,
+    is_boss_prompt,
+    is_portal_prompt,
 )
 from autobonk.perception.dom import Observation
 from autobonk.policy.zone import distance
@@ -25,6 +31,44 @@ log = logging.getLogger(__name__)
 def direction(bearing: float) -> frozenset[str]:
     """WASD for a minimap bearing (degrees clockwise from minimap-up), to nearest 45 degrees."""
     return frozenset(DIRECTION_KEYS[round((90 - bearing) / 45) % 8])
+
+
+def orbit_bearing(
+    target_x: float,
+    target_y: float,
+    orbit_radius: float = 6.0,
+    clockwise: bool = True,
+) -> float:
+    """Calculates bearing (degrees clockwise from minimap-up) to orbit around (target_x, target_y).
+
+    Includes proportional radial correction to keep distance near orbit_radius:
+    - If too far outward, steers inward towards target
+    - If too close inward, steers outward away from target
+    - Otherwise, steers along the tangent
+    """
+    dist = math.hypot(target_x, target_y)
+    bearing_to_target = math.degrees(math.atan2(target_x, -target_y))
+    sign = -1.0 if clockwise else 1.0
+
+    if dist > orbit_radius + 2.0:
+        offset = 55.0  # Steer inward towards target
+    elif dist < max(2.0, orbit_radius - 2.0):
+        offset = 125.0  # Steer outward away from target
+    else:
+        offset = 90.0  # Pure tangent
+
+    return (bearing_to_target + sign * offset) % 360.0
+
+
+def time_orbit_bearing(
+    elapsed_s: float,
+    period_s: float = 3.6,
+    initial_bearing: float = 0.0,
+    clockwise: bool = True,
+) -> float:
+    """Calculates smoothly rotating bearing to trace a circular trajectory in open arena."""
+    sign = 1.0 if clockwise else -1.0
+    return (initial_bearing + sign * (360.0 * (elapsed_s / period_s))) % 360.0
 
 
 class Uniform(Protocol):
@@ -81,12 +125,13 @@ class Unsticker:
             self._progress = None
             return keys
 
-        if target_dist is not None:
-            mark: object = target_dist
+        if obs.zonemap:
+            player_pos = obs.zonemap.player
+            mark: object = player_pos
+            progressed = lambda last: isinstance(last, tuple) and distance(last, player_pos) >= ZONE_PROGRESS  # noqa: E731
+        elif target_dist is not None:
+            mark = target_dist
             progressed = lambda last: (last - mark) >= ALTAR_PROGRESS_PX  # noqa: E731
-        elif obs.zonemap:
-            mark = obs.zonemap.player
-            progressed = lambda last: distance(last, mark) >= ZONE_PROGRESS  # noqa: E731
         else:
             return keys
 
@@ -103,6 +148,11 @@ class Unsticker:
         log.info("stuck for %g s: sidestepping %s", self.stuck_s, "left" if side < 0 else "right")
         self._sidestep = (sidestep, now + self.sidestep_s)
         return sidestep | (keys & {MAP_KEY})
+
+    def stuck_duration(self, now: float) -> float:
+        if self._progress is not None:
+            return max(0.0, now - self._progress[1])
+        return 0.0
 
 
 class ApproachHandler:
@@ -121,22 +171,42 @@ class ApproachHandler:
         spam_e: bool = True,
         prompt_text: str = "",
         pos: tuple[float, float] | None = None,
-        on_timeout_ignore: None | tuple[object, ...] = None,
+        at_target: bool = True,
+        is_sanctuary: bool = False,
     ) -> tuple[list[Command], bool]:
         """Interacts with target. Returns (commands, timed_out)."""
         if self.interacted is None or self.interacted[0] != name:
             if not spam_e:
-                self.interacted = (name, now, 0.0)
+                # At the target but E not allowed yet: start the timer so it still times out.
+                # Short of the target, record nothing: an approach in progress must keep the
+                # unsticker working (it stands down while an interaction is recorded).
+                if at_target:
+                    self.interacted = (name, now, 0.0)
                 return [], False
             log.info("at %s: pressing E", name)
-            self.interacted = (name, now, now)
+            self.interacted = (name, now if at_target else 0.0, now)
             return [Press(INTERACT_KEY)], False
 
         _, started, last_pressed = self.interacted
-        if now - started >= INTERACT_WAIT_S:
-            timed_out = name not in PORTAL_PROMPTS
-            self.interacted = None
-            return [], timed_out
+        if started == 0.0 and at_target:
+            started = now
+
+        # Boss summons and portals can take longer than INTERACT_WAIT_S to react; never
+        # give up on them. Only the target's own name decides this (it is the prompt text
+        # when the bot walks up to a bare prompt): a boss or portal prompt that happens to be
+        # on screen must not shield an unrelated target.
+        is_boss_or_portal = (
+            name in (BOSS, PORTAL, SANCTUARY)
+            or is_portal_prompt(name)
+            or is_boss_prompt(name)
+            or (name == ALTAR and (is_sanctuary or any(k in prompt_text for k in SANCTUARY_PROMPTS)))
+        )
+        if started > 0.0 and (now - started >= INTERACT_WAIT_S):
+            timed_out = not is_boss_or_portal
+            if timed_out:
+                self.interacted = None
+                return [], timed_out
+            started = now
 
         if spam_e and now - last_pressed >= INTERACT_RETRY_S:
             if last_pressed == 0.0:
@@ -144,4 +214,5 @@ class ApproachHandler:
             self.interacted = (name, started, now)
             return [Press(INTERACT_KEY)], False
 
+        self.interacted = (name, started, last_pressed)
         return [], False

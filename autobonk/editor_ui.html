@@ -49,6 +49,11 @@
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
+    .nav-links { display: flex; align-items: center; gap: 6px; }
+    .nav-item { padding: 6px 12px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
+    .nav-item:hover { color: var(--ink); background: var(--panel-2); }
+    .nav-item.active { color: var(--ink); background: var(--panel-2); border-color: var(--line); color: var(--accent); font-weight: 600; }
+
     /* ---------- Top bar ---------- */
     .topbar {
       position: sticky; top: 0; z-index: 50;
@@ -277,10 +282,16 @@
 <body>
 
   <header class="topbar">
-    <h1>PokéBonk 卡牌与宝可梦权重配置</h1>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <h1>PokéBonk 卡牌配置</h1>
+      <nav class="nav-links">
+        <a href="/" class="nav-item">📊 运行仪表盘</a>
+        <a href="/cards" class="nav-item active">🎴 卡牌权重配置</a>
+        <a href="/targets" class="nav-item">🎯 地图目标设置</a>
+      </nav>
+    </div>
     <span class="path" id="configPath"></span>
     <span class="spacer"></span>
-    <a class="btn" href="/targets" style="text-decoration:none;white-space:nowrap">地图目标 →</a>
     <span class="sync" id="syncState">已同步</span>
     <button class="btn btn-primary" id="saveBtn">保存<kbd>Ctrl S</kbd></button>
   </header>
@@ -295,22 +306,38 @@
             <span id="liveBadgeText">未连接</span>
           </div>
         </div>
-        <div class="live-grid">
+        <div class="live-grid" style="grid-template-columns: repeat(2, 1fr);">
           <div class="live-cell">
             <span>当前目标</span>
             <b id="liveTarget">-</b>
           </div>
           <div class="live-cell">
-            <span>单步耗时</span>
-            <b id="liveStepMs">- ms</b>
+            <span>等级与倒计时</span>
+            <b id="liveLevelTime">-</b>
+          </div>
+          <div class="live-cell">
+            <span>头目战状态 (Boss)</span>
+            <b id="liveBoss">-</b>
+          </div>
+          <div class="live-cell">
+            <span>导航与模式</span>
+            <b id="liveNavMode">-</b>
           </div>
           <div class="live-cell">
             <span>所在区域</span>
             <b id="liveZone">-</b>
           </div>
           <div class="live-cell">
-            <span>充能状态</span>
-            <b id="liveCharging">否</b>
+            <span>目标距离</span>
+            <b id="liveDistance">-</b>
+          </div>
+          <div class="live-cell">
+            <span>当前按键</span>
+            <b id="liveHeld">-</b>
+          </div>
+          <div class="live-cell">
+            <span>单步耗时</span>
+            <b id="liveStepMs">- ms</b>
           </div>
         </div>
         <div class="live-controls">
@@ -465,6 +492,7 @@
     function setWeight(name, value) {
       let w = Number(value);
       if (!Number.isFinite(w)) w = 0;
+      w = Math.min(10, w);
       if (state.selected !== BASE) {
         // In a profile any value overrides the shared one, 0 included ("ignore it for this Pokémon").
         (state.profiles[state.selected] ||= {})[name] = w;
@@ -705,7 +733,7 @@
             </div>
             <div class="stepper">
               <button data-step="-1" aria-label="${esc(c.name)} 权重减 1">−</button>
-              <input type="number" step="1" value="${w}" aria-label="${esc(c.name)} 权重">
+              <input type="number" step="1" max="10" value="${w}" aria-label="${esc(c.name)} 权重">
               <button data-step="1" aria-label="${esc(c.name)} 权重加 1">+</button>
             </div>
           </div>
@@ -936,10 +964,35 @@
           toggleBtn.className = 'btn btn-live-toggle';
         }
 
-        $('liveTarget').textContent = s.target || (s.charging ? '符文祭坛充能中' : '探索漫游');
-        $('liveStepMs').textContent = s.step_duration_ms ? `${s.step_duration_ms} ms` : '-';
+        let targetText = s.target || (s.charging ? '符文祭坛充能中' : '探索漫游');
+        if (s.stuck_seconds > 1.0) {
+          targetText += ` (脱困中 ${s.stuck_seconds}s)`;
+        }
+        $('liveTarget').textContent = targetText;
+
+        const levelStr = s.level != null ? `Lv ${s.level}` : 'Lv -';
+        const countStr = s.countdown ? s.countdown : '--:--';
+        $('liveLevelTime').textContent = `${levelStr} | ${countStr}`;
+
+        let bossText = '等待中';
+        if (s.boss_phase === 'fighting') {
+          bossText = '⚔️ 战斗中';
+        } else if (s.boss_phase === 'beaten') {
+          bossText = '✅ 已击败';
+        } else if (s.boss_ready) {
+          bossText = '🎯 条件已达成 (锁定中)';
+        } else {
+          bossText = '⏳ 条件未达成';
+        }
+        $('liveBoss').textContent = bossText;
+
+        const navModeText = s.nav_mode === 'zonemap' ? '🗺️ 全图地图 (Tab)' : '🧭 小地图';
+        $('liveNavMode').textContent = navModeText;
+
         $('liveZone').textContent = s.zone || '游戏中';
-        $('liveCharging').textContent = s.charging ? '是 (充能中)' : '否';
+        $('liveDistance').textContent = s.target_distance != null ? `${Math.round(s.target_distance)} px` : '-';
+        $('liveHeld').textContent = (s.held_keys && s.held_keys.length > 0) ? s.held_keys.join(', ') : '无';
+        $('liveStepMs').textContent = s.step_duration_ms ? `${s.step_duration_ms} ms` : '-';
 
         if (s.recent_logs && s.recent_logs.length > 0) {
           const logsEl = $('liveLogs');

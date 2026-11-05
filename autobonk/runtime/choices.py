@@ -1,12 +1,15 @@
 """Watches player popup answers while bot is paused to record choice data."""
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from autobonk.perception.dom import Popup
+if TYPE_CHECKING:
+    from autobonk.perception.dom import Popup
 
 RECORD_INPUTS_SCRIPT = """
 (() => {

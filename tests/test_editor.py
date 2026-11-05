@@ -159,7 +159,11 @@ def test_handler_server_end_to_end(tmp_path: Path):
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
             assert resp.status == 200
-            assert "PokéBonk 卡牌与宝可梦权重配置" in resp.read().decode("utf-8")
+            assert "PokéBonk" in resp.read().decode("utf-8")
+
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/cards") as resp:
+            assert resp.status == 200
+            assert "PokéBonk 卡牌配置" in resp.read().decode("utf-8")
 
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/data") as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -207,6 +211,28 @@ def test_save_refuses_cross_origin_requests(tmp_path: Path):
         assert post({"Content-Type": "application/json", "Host": f"evil.example:{port}"}) == 403
         assert '"月之石" = 10' in toml_path.read_text(encoding="utf-8")
         assert post({"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"}) == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_save_clamps_weights_to_ten(tmp_path: Path):
+    toml_path = tmp_path / "autobonk.toml"
+    toml_path.write_text('[cards.weights]\n"月之石" = 10\n', encoding="utf-8")
+    server, port = serve(toml_path)
+    body = json.dumps({"baseline_weights": {"神卡": 15, "正常卡": 8}, "rarity_order": []}).encode("utf-8")
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/save",
+        data=body,
+        headers={"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"},
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            assert resp.status == 200
+        content = toml_path.read_text(encoding="utf-8")
+        # Should be clamped to 10
+        assert '"神卡" = 10' in content
+        assert '"正常卡" = 8' in content
     finally:
         server.shutdown()
         server.server_close()

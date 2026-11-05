@@ -7,7 +7,9 @@ from autobonk.game import (
     ALTAR_PROGRESS_PX,
     APPROACH_PX_PER_S,
     BOSS,
+    BOSS_LOOT,
     CLOSE_TIMEOUT_PX,
+    COIN,
     DEFAULT_TARGETS,
     DIRECTION_KEYS,
     DITTO_TITLE,
@@ -23,6 +25,7 @@ from autobonk.game import (
     POPUP_RETRY_S,
     PORTAL,
     READY_BUTTON,
+    RELEASE_NEWCOMER,
     SUPER_BALL,
     SUPER_BALLS,
     TARGET_ARRIVED_PX,
@@ -33,8 +36,10 @@ from autobonk.game import (
     Weight,
 )
 from autobonk.policy.bot import Bot, BotStatus, Movement
-from autobonk.policy.navigation import Uniform, direction as _direction
-from autobonk.policy.zone import cell as _cell, distance as _distance
+from autobonk.policy.navigation import Uniform
+from autobonk.policy.navigation import direction as _direction
+from autobonk.policy.zone import cell as _cell
+from autobonk.policy.zone import distance as _distance
 
 __all__ = [
     "Bot",
@@ -52,6 +57,8 @@ __all__ = [
     "Hold",
     "ALTAR",
     "BOSS",
+    "BOSS_LOOT",
+    "COIN",
     "PORTAL",
     "SUPER_BALL",
     "SUPER_BALLS",
@@ -72,6 +79,7 @@ __all__ = [
     "KEY_NAMES",
     "PICK_UP_BUTTON",
     "READY_BUTTON",
+    "RELEASE_NEWCOMER",
     "DITTO_TITLE",
     "TEAM_VIEW",
     "POPUP_RETRY_S",

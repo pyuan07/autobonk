@@ -1,4 +1,4 @@
-"""Reads the corner minimap canvas (400x400 PNG, player at the centre, W = minimap-up)."""
+"""Reads the corner minimap canvas (400x400 PNG, player at the centre, KeyW = minimap-up)."""
 
 import math
 from pathlib import Path
@@ -13,13 +13,14 @@ from autobonk.perception.matching import (
     match_many,
 )
 
-# Template paths (fallback to parent directory if in subpackage)
-_PKG_DIR = Path(__file__).resolve().parent
-_ROOT_DIR = _PKG_DIR.parent
-ALTAR_TEMPLATE = _PKG_DIR / "altar_crystal.png" if (_PKG_DIR / "altar_crystal.png").exists() else _ROOT_DIR / "altar_crystal.png"
-NORTH_TEMPLATE = _PKG_DIR / "north_marker.png" if (_PKG_DIR / "north_marker.png").exists() else _ROOT_DIR / "north_marker.png"
+# Templates live at the package root next to the other HUD images (see package-data).
+_TEMPLATE_DIR = Path(__file__).resolve().parent.parent
+ALTAR_TEMPLATE = _TEMPLATE_DIR / "altar_crystal.png"
+SANCTUARY_ALTAR_TEMPLATE = _TEMPLATE_DIR / "sanctuary_altar.png"
+NORTH_TEMPLATE = _TEMPLATE_DIR / "north_marker.png"
 
 ALTAR_MATCH = 0.5
+SANCTUARY_ALTAR_MATCH = 0.6
 NORTH_MATCH = 0.7
 RIM = (160, 200)
 CENTRE = 200
@@ -30,11 +31,14 @@ def find_altars(image: np.ndarray | bytes) -> list[Point]:
         if not image:
             return []
         image = load_rgb(image)
-    return [(x - CENTRE, y - CENTRE) for x, y in find_icons(image, ALTAR_TEMPLATE, ALTAR_MATCH)]
+    pts = [(x - CENTRE, y - CENTRE) for x, y in find_icons(image, ALTAR_TEMPLATE, ALTAR_MATCH)]
+    if not pts and SANCTUARY_ALTAR_TEMPLATE.exists():
+        pts = [(x - CENTRE, y - CENTRE) for x, y in find_icons(image, SANCTUARY_ALTAR_TEMPLATE, SANCTUARY_ALTAR_MATCH)]
+    return pts
 
 
 def north_bearing(image: np.ndarray | bytes) -> float | None:
-    """Where 北 sits on the rim, in degrees clockwise from minimap-up (W)."""
+    """Where 北 sits on the rim, in degrees clockwise from minimap-up (KeyW)."""
     if isinstance(image, bytes):
         if not image:
             return None

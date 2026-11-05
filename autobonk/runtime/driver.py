@@ -1,6 +1,7 @@
 """Executes commands through Playwright's keyboard and mouse."""
 
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from typing import Protocol
 
 from playwright.sync_api import Page
 
@@ -33,10 +34,11 @@ class KeyboardDriver:
         self._keyboard.down(key)
         self._keyboard.up(key)
 
-    def click(self, text: str) -> None:
+    def click(self, text: str, selector: str | None = None) -> None:
         if self._page is None:
             raise RuntimeError("this driver has no page to click on")
-        self._page.get_by_text(text, exact=True).filter(visible=True).first.click(timeout=CLICK_TIMEOUT_MS)
+        locator = self._page.locator(selector) if selector else self._page.get_by_text(text, exact=True)
+        locator.filter(visible=True).first.click(timeout=CLICK_TIMEOUT_MS)
 
     def release_all(self) -> None:
         held, self._held = self._held, set()

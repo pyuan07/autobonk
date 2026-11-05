@@ -20,19 +20,21 @@ from autobonk.dashboard.toml_store import (
     save_config_weights,
     save_target_weights,
 )
-from autobonk.game import ALTAR, BOSS
+from autobonk.game import ALTAR, BOSS, EXPLORE
 from autobonk.perception.icons import ICON_DIR, ITEM_ICONS, POKEMON_ICONS
 from autobonk.perception.minimap import ALTAR_TEMPLATE
 
-_PKG_DIR = Path(__file__).resolve().parent
-_ROOT_DIR = _PKG_DIR.parent
-UI_HTML_PATH = _PKG_DIR / "editor_ui.html" if (_PKG_DIR / "editor_ui.html").exists() else _ROOT_DIR / "editor_ui.html"
-TARGETS_HTML_PATH = _PKG_DIR / "targets_ui.html" if (_PKG_DIR / "targets_ui.html").exists() else _ROOT_DIR / "targets_ui.html"
+# Pages and images live at the package root (see package-data).
+_ROOT_DIR = Path(__file__).resolve().parent.parent
+DASHBOARD_HTML_PATH = _ROOT_DIR / "dashboard_ui.html"
+UI_HTML_PATH = _ROOT_DIR / "editor_ui.html"
+TARGETS_HTML_PATH = _ROOT_DIR / "targets_ui.html"
 
 TARGET_GROUPS: list[tuple[str, dict[str, Path]]] = [
     ("祭坛", {ALTAR: ALTAR_TEMPLATE}),
     ("物品与设施", {name: ICON_DIR / file for name, file in ITEM_ICONS.items() if name != BOSS}),
     ("宝可梦（商店、教学、头目）", {name: ICON_DIR / file for name, file in POKEMON_ICONS.items()}),
+    ("地图探索", {EXPLORE: _ROOT_DIR / "north_marker.png"}),
 ]
 TARGET_IMAGES = {name: path for _, icons in TARGET_GROUPS for name, path in icons.items()}
 TARGET_IMAGES[BOSS] = ICON_DIR / ITEM_ICONS[BOSS]
@@ -68,7 +70,9 @@ def make_handler(config_path: Path):
 
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
-            if path in ("/", "/index.html"):
+            if path in ("/", "/index.html", "/dashboard"):
+                self._send(HTTPStatus.OK, "text/html", DASHBOARD_HTML_PATH.read_text(encoding="utf-8"))
+            elif path in ("/cards", "/editor"):
                 self._send(HTTPStatus.OK, "text/html", UI_HTML_PATH.read_text(encoding="utf-8"))
             elif path == "/targets":
                 self._send(HTTPStatus.OK, "text/html", TARGETS_HTML_PATH.read_text(encoding="utf-8"))

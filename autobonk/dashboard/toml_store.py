@@ -7,7 +7,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from autobonk.game import ALTAR, BOSS, BossRule
+from autobonk.game import ALTAR, BossRule
 from autobonk.policy.cards import blessing_key
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -40,7 +40,7 @@ def read_config_weights(
     data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
     cards_section = data.get("cards", {})
 
-    baseline_weights = dict(cards_section.get("weights", {}))
+    baseline_weights = {k: min(10.0, float(v)) for k, v in dict(cards_section.get("weights", {})).items()}
     rarity_order = list(cards_section.get("rarity_order", DEFAULT_RARITY_ORDER))
     active_pokemon = cards_section.get("active_pokemon")
 
@@ -49,7 +49,7 @@ def read_config_weights(
     if isinstance(raw_pokemon, dict):
         for poke_name, w_dict in raw_pokemon.items():
             if isinstance(w_dict, dict):
-                pokemon_profiles[poke_name] = {k: float(v) for k, v in w_dict.items()}
+                pokemon_profiles[poke_name] = {k: min(10.0, float(v)) for k, v in w_dict.items()}
 
     return baseline_weights, rarity_order, active_pokemon, pokemon_profiles
 
@@ -262,5 +262,5 @@ def _numeric(weights: Any) -> dict[str, float]:
     for name, value in weights.items():
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"weight for {name!r} is not a number: {value!r}")
-        out[str(name)] = value
+        out[str(name)] = min(10.0, float(value))
     return out

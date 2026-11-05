@@ -35,3 +35,47 @@ def test_equal_stat_weights_fall_back_to_rarity():
     offered = blessings(("+21% 伤害", "稀有"), ("+22% 速度", "史诗"))
 
     assert prefs.best(offered).name == "+22% 速度"
+
+
+def test_in_plan_flag_from_details():
+    c = Card("1", "鸣雷风暴", "招式", ("新", "在你的计划中"))
+    assert c.in_plan is True
+
+
+def test_in_plan_beats_lower_non_plan_cards():
+    prefs = CardPrefs(weights={"+伤害": 8, "防御增强剂": 5})
+    plan_card = Card("1", "鸣雷风暴", "招式", in_plan=True)
+    damage = Card("2", "+38% 伤害", "稀有", in_plan=False)
+    defense = Card("3", "防御增强剂", "普通", in_plan=False)
+
+    assert prefs.best([damage, plan_card, defense]) == plan_card
+
+
+def test_high_weight_non_plan_competes_with_plan_card():
+    # 10-weight flute beats 9-weight plan card
+    prefs = CardPrefs(weights={"宝可梦之笛": 10, "鸣雷风暴": 9})
+    flute = Card("1", "宝可梦之笛", "普通", in_plan=False)
+    storm = Card("2", "鸣雷风暴", "招式", in_plan=True)
+
+    assert prefs.best([storm, flute]) == flute
+
+    # 9-weight item beats 0-weight (unconfigured) plan card
+    prefs2 = CardPrefs(weights={"全满药": 9})
+    potion = Card("1", "全满药", "普通", in_plan=False)
+    unweighted_storm = Card("2", "鸣雷风暴", "招式", in_plan=True)
+
+    assert prefs2.best([unweighted_storm, potion]) == potion
+
+
+def test_multiple_plan_cards_tie_break_by_weight_then_rarity():
+    prefs = CardPrefs(weights={"招式A": 8, "招式B": 9}, rarity_order=("传说", "史诗", "招式", "普通"))
+    a = Card("1", "招式A", "招式", in_plan=True)
+    b = Card("2", "招式B", "招式", in_plan=True)
+    assert prefs.best([a, b]) == b
+
+    # Equal weight -> rarity order
+    prefs_equal = CardPrefs(weights={"招式A": 8, "招式B": 8}, rarity_order=("传说", "史诗", "招式", "普通"))
+    a_rare = Card("1", "招式A", "史诗", in_plan=True)
+    b_common = Card("2", "招式B", "普通", in_plan=True)
+    assert prefs_equal.best([b_common, a_rare]) == a_rare
+

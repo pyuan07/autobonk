@@ -41,6 +41,12 @@ def test_no_minimap_no_altars():
     assert find_altars(b"") == []
 
 
+def test_finds_sanctuary_altar():
+    raw = (FRAMES / "frame-20261031-153043-487.minimap.png").read_bytes()
+    [(x, y)] = find_altars(raw)
+    assert abs(x - (-1)) <= 3 and abs(y - (-34)) <= 3
+
+
 # Where 北 sits on the minimap rim, in degrees clockwise from minimap-up.
 @pytest.mark.parametrize(
     "name, bearing",

@@ -23,6 +23,16 @@ class BotState:
     stuck_seconds: float = 0.0
     recent_commands: list[str] = field(default_factory=list)
     recent_logs: list[str] = field(default_factory=list)
+    boss_phase: str = "waiting"
+    boss_ready: bool = False
+    nav_mode: str = "minimap"
+    held_keys: list[str] = field(default_factory=list)
+    main_target: str = ""
+    sub_target: str = ""
+    sub_target_distance: float | None = None
+    runs: int = 0
+    wins: int = 0
+    losses: int = 0
 
 
 class DashboardHub:
@@ -50,6 +60,16 @@ class DashboardHub:
         charging: bool = False,
         stuck_seconds: float = 0.0,
         commands: list[str] | None = None,
+        boss_phase: str = "waiting",
+        boss_ready: bool = False,
+        nav_mode: str = "minimap",
+        held_keys: list[str] | None = None,
+        main_target: str = "",
+        sub_target: str = "",
+        sub_target_distance: float | None = None,
+        runs: int = 0,
+        wins: int = 0,
+        losses: int = 0,
     ) -> None:
         with self._lock:
             self._state.paused = paused
@@ -64,6 +84,17 @@ class DashboardHub:
             self._state.step_duration_ms = step_duration_ms
             self._state.charging = charging
             self._state.stuck_seconds = stuck_seconds
+            self._state.boss_phase = boss_phase
+            self._state.boss_ready = boss_ready
+            self._state.nav_mode = nav_mode
+            self._state.main_target = main_target
+            self._state.sub_target = sub_target
+            self._state.sub_target_distance = sub_target_distance
+            self._state.runs = runs
+            self._state.wins = wins
+            self._state.losses = losses
+            if held_keys is not None:
+                self._state.held_keys = held_keys
             if commands is not None:
                 self._state.recent_commands = commands
 

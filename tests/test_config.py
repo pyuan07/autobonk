@@ -55,9 +55,36 @@ def test_distance_factor_configurable_or_defaults(tmp_path):
     assert load_config(tmp_path / "nope.toml").distance_factor == 0.2
 
 
+def test_sub_target_allowances_configurable_or_defaults(tmp_path):
+    path = tmp_path / "autobonk.toml"
+    path.write_text('[bot]\nsub_target_base_allowance = 20.0\nsub_target_weight_factor = 5.0\n', encoding="utf-8")
+
+    cfg = load_config(path)
+    assert cfg.sub_target_base_allowance == 20.0
+    assert cfg.sub_target_weight_factor == 5.0
+
+    default_cfg = load_config(tmp_path / "nope.toml")
+    assert default_cfg.sub_target_base_allowance == 12.0
+    assert default_cfg.sub_target_weight_factor == 3.0
+
+
 def test_same_key_for_both_hotkeys_is_rejected(tmp_path):
     path = tmp_path / "autobonk.toml"
     path.write_text('[hotkeys]\npause = "F9"\n', encoding="utf-8")
 
     with pytest.raises(ValueError, match="f9"):
         load_config(path)
+
+
+def test_plan_fallback_reroll_threshold_and_weight_cap(tmp_path):
+    path = tmp_path / "autobonk.toml"
+    path.write_text(
+        '[cards]\nplan_fallback_reroll_threshold = 8.5\n\n'
+        '[cards.weights]\n"神卡" = 15\n"普通卡" = 6\n',
+        encoding="utf-8",
+    )
+    config = load_config(path)
+    assert config.plan_fallback_reroll_threshold == 8.5
+    # Clamped at 10.0
+    assert config.cards.weight("神卡") == 10.0
+    assert config.cards.weight("普通卡") == 6.0

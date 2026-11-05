@@ -31,6 +31,7 @@ class Press:
 class Click:
     """Click on text or an element in the game."""
     text: str
+    selector: str | None = None
 
 
 @dataclass(frozen=True)

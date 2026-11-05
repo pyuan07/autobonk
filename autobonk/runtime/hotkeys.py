@@ -1,6 +1,6 @@
 """Global OS hotkeys that fire whichever app has focus."""
 
-from typing import Callable
+from collections.abc import Callable
 
 from pynput import keyboard
 

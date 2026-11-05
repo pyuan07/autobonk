@@ -4,8 +4,10 @@ from autobonk.perception.matching import (
     Point,
     find_icons,
     load_rgb,
-    load_template as _template,
     match_many,
+)
+from autobonk.perception.matching import (
+    load_template as _template,
 )
 from autobonk.perception.minimap import (
     ALTAR_MATCH,

@@ -1,6 +1,6 @@
 [project]
 name = "autobonk"
-version = "0.1.0"
+version = "0.3.0"
 description = "PokéBonk autopilot"
 requires-python = ">=3.11"
 dependencies = [
@@ -11,7 +11,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "mypy>=1.10"]
+dev = [
+    "pytest>=8",
+    "mypy>=1.10",
+    "ruff>=0.17.3",
+]
 
 [project.scripts]
 autobonk = "autobonk.__main__:main"
@@ -34,3 +38,13 @@ build-backend = "setuptools.build_meta"
 [[tool.mypy.overrides]]
 module = "pynput.*"
 ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+
+[tool.ruff.lint]
+# Pyflakes (unused/undefined names), pycodestyle errors, import order, bugbear, simplify.
+select = ["F", "E", "W", "I", "B", "SIM", "UP"]
+# SIM102: nested ifs here read as staged checks (phase, then timing).
+ignore = ["E501", "SIM102", "SIM108"]

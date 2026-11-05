@@ -39,3 +39,19 @@ def test_finds_the_icons_asked_for():
     assert sorted(name for name, _ in zone.targets) == ["喵喵", "骷髅"]
     [(_, (x, y))] = [t for t in zone.targets if t[0] == "喵喵"]
     assert 0.45 < x < 0.5 and y < 0.02  # top middle
+
+
+def test_heading_continuity_prefers_forward_cell():
+    from autobonk.policy.zone import ZoneTracker
+    tracker = ZoneTracker()
+    inner = [(col, row) for col in range(1, 7) for row in range(1, 7)]
+    for c in inner:
+        if c not in [(3, 2), (3, 4)]:
+            tracker.visited.add(c)
+    player = (3.5 / 8, 3.5 / 8)  # cell (3, 3) center
+
+    tracker.heading = 0.0  # North (towards row 2)
+    assert tracker.nearest_unvisited(player) == (0.4375, 0.3125)
+
+    tracker.heading = 180.0  # South (towards row 4)
+    assert tracker.nearest_unvisited(player) == (0.4375, 0.5625)

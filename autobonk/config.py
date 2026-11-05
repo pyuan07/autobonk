@@ -31,9 +31,16 @@ class Config:
     stuck_s: float = 2.5
     sidestep_s: float = 0.6
     distance_factor: float = 0.2
+    altar_orbit: bool = True
+    sub_target_base_allowance: float = 12.0
+    sub_target_weight_factor: float = 3.0
     banish_threshold: float | None = -5.0
     reroll_threshold: float | None = 0.0
     skip_threshold: float | None = 0.0
+    plan_fallback_reroll_threshold: float = 7.0
+    auto_restart: str = "always"
+    max_runs: int = 0
+    restart_load_s: float = 20.0
 
     @property
     def movement(self) -> Movement:
@@ -44,6 +51,7 @@ class Config:
             stuck_s=self.stuck_s,
             sidestep_s=self.sidestep_s,
             distance_factor=self.distance_factor,
+            altar_orbit=self.altar_orbit,
         )
 
 
@@ -71,6 +79,7 @@ def load_config(path: Path) -> Config:
         specific = pokemon_table[active_pokemon]
         if isinstance(specific, dict):
             weights.update(specific)
+    weights = {k: min(10.0, float(v)) for k, v in weights.items()}
 
     targets_data = {
         name: tuple(w) if isinstance(w, list) else w
@@ -105,9 +114,16 @@ def load_config(path: Path) -> Config:
         stuck_s=bot.get("stuck_s", 2.5),
         sidestep_s=bot.get("sidestep_s", 0.6),
         distance_factor=float(bot.get("distance_factor", data.get("targets", {}).get("distance_factor", 0.2))),
+        altar_orbit=bool(bot.get("altar_orbit", True)),
+        sub_target_base_allowance=float(bot.get("sub_target_base_allowance", data.get("targets", {}).get("sub_target_base_allowance", 12.0))),
+        sub_target_weight_factor=float(bot.get("sub_target_weight_factor", data.get("targets", {}).get("sub_target_weight_factor", 3.0))),
         banish_threshold=cards.get("banish_threshold", -5.0),
         reroll_threshold=cards.get("reroll_threshold", 0.0),
         skip_threshold=cards.get("skip_threshold", 0.0),
+        plan_fallback_reroll_threshold=float(cards.get("plan_fallback_reroll_threshold", 7.0)),
+        auto_restart=str(bot.get("auto_restart", "always")),
+        max_runs=int(bot.get("max_runs", 0)),
+        restart_load_s=float(bot.get("restart_load_s", 20.0)),
     )
 
 
