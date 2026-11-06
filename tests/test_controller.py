@@ -251,3 +251,68 @@ def test_controller_hot_reload_updates_bot_config(tmp_path):
     controller.poll()
     assert bot._popups.cards.weights.get("双翼") == 9.0
     assert bot._target_selector._weights.get("宝箱") == (20.0, 20.0)
+
+
+def test_keyboard_driver_click_dispatches_trusted_mouse_click_on_first_visible_match():
+    import pytest
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    from autobonk.runtime.driver import CLICK_TIMEOUT_MS, KeyboardDriver
+
+    class FakeLocator:
+        def __init__(self, fail: bool = False):
+            self.fail = fail
+            self.calls: list[tuple] = []
+
+        def filter(self, *, visible: bool):
+            self.calls.append(("filter", visible))
+            return self
+
+        @property
+        def first(self):
+            return self
+
+        def bounding_box(self, *, timeout: int):
+            self.calls.append(("bounding_box", timeout))
+            if self.fail:
+                raise PlaywrightTimeoutError("waiting for element")
+            return {"x": 100.0, "y": 200.0, "width": 80.0, "height": 40.0}
+
+    class FakeMouse:
+        def __init__(self, calls: list[tuple]):
+            self._calls = calls
+
+        def click(self, x: float, y: float):
+            self._calls.append(("mouse.click", x, y))
+
+    class FakePage:
+        def __init__(self, locator: FakeLocator):
+            self._locator = locator
+            self.mouse = FakeMouse(locator.calls)
+
+        def locator(self, selector: str):
+            self._locator.calls.append(("locator", selector))
+            return self._locator
+
+        def get_by_text(self, text: str, *, exact: bool):
+            self._locator.calls.append(("get_by_text", text, exact))
+            return self._locator
+
+    class DummyKeyboard:
+        def down(self, key: str) -> None: ...
+        def up(self, key: str) -> None: ...
+
+    found = FakeLocator()
+    KeyboardDriver(DummyKeyboard(), page=FakePage(found)).click("再来一次", selector=".sm-foot button.green")  # type: ignore[arg-type]
+    assert found.calls == [
+        ("locator", ".sm-foot button.green"),
+        ("filter", True),
+        ("bounding_box", CLICK_TIMEOUT_MS),
+        ("mouse.click", 140.0, 220.0),
+    ]
+
+    # A missing button fails once, quickly, so the controller can halt instead of blocking 3x the timeout.
+    missing = FakeLocator(fail=True)
+    with pytest.raises(PlaywrightTimeoutError):
+        KeyboardDriver(DummyKeyboard(), page=FakePage(missing)).click("再来一次")  # type: ignore[arg-type]
+    assert [c[0] for c in missing.calls] == ["get_by_text", "filter", "bounding_box"]

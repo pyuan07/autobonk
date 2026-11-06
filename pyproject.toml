@@ -25,7 +25,7 @@ where = ["."]
 include = ["autobonk*"]
 
 [tool.setuptools.package-data]
-autobonk = ["*.json", "*.html", "*.png", "icons/*.png"]
+autobonk = ["*.json", "*.html", "*.css", "*.js", "*.png", "icons/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

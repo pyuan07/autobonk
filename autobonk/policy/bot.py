@@ -356,6 +356,11 @@ class Bot:
             self._jumper.reset()
             return self._release(self._popups.close_team_view(frame.timestamp))
 
+        if obs.game_paused:
+            self._unrecognised_since = None
+            self._jumper.reset()
+            return self._release(self._popups.close_game_pause(frame.timestamp))
+
         if obs.popup:
             self._unrecognised_since = None
             self._jumper.reset()

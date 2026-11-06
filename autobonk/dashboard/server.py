@@ -4,7 +4,7 @@ import json
 import socket
 import webbrowser
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -29,6 +29,11 @@ _ROOT_DIR = Path(__file__).resolve().parent.parent
 DASHBOARD_HTML_PATH = _ROOT_DIR / "dashboard_ui.html"
 UI_HTML_PATH = _ROOT_DIR / "editor_ui.html"
 TARGETS_HTML_PATH = _ROOT_DIR / "targets_ui.html"
+# Shared stylesheet and script for all three pages.
+STATIC_FILES = {
+    "ui.css": (_ROOT_DIR / "ui.css", "text/css"),
+    "ui.js": (_ROOT_DIR / "ui.js", "text/javascript"),
+}
 
 TARGET_GROUPS: list[tuple[str, dict[str, Path]]] = [
     ("祭坛", {ALTAR: ALTAR_TEMPLATE}),
@@ -76,6 +81,9 @@ def make_handler(config_path: Path):
                 self._send(HTTPStatus.OK, "text/html", UI_HTML_PATH.read_text(encoding="utf-8"))
             elif path == "/targets":
                 self._send(HTTPStatus.OK, "text/html", TARGETS_HTML_PATH.read_text(encoding="utf-8"))
+            elif path.startswith("/static/") and path[len("/static/"):] in STATIC_FILES:
+                file, content_type = STATIC_FILES[path[len("/static/"):]]
+                self._send(HTTPStatus.OK, content_type, file.read_text(encoding="utf-8"))
             elif path == "/api/targets":
                 data = target_list(config_path)
                 data["config_path"] = str(config_path)
@@ -166,7 +174,10 @@ def run_editor(config_path: Path, port: int = 8080, open_browser: bool = True) -
     actual_port = find_free_port(port)
     server_address = ("127.0.0.1", actual_port)
     handler_class = make_handler(config_path)
-    httpd = HTTPServer(server_address, handler_class)
+    # Threaded: the pages poll /api/status every second while loading dozens of icons at once,
+    # and a single-threaded server's listen backlog drops those connections.
+    httpd = ThreadingHTTPServer(server_address, handler_class)
+    httpd.daemon_threads = True
 
     url = f"http://127.0.0.1:{actual_port}/"
     print("\n=======================================================")

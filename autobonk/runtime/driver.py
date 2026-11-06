@@ -38,7 +38,12 @@ class KeyboardDriver:
         if self._page is None:
             raise RuntimeError("this driver has no page to click on")
         locator = self._page.locator(selector) if selector else self._page.get_by_text(text, exact=True)
-        locator.filter(visible=True).first.click(timeout=CLICK_TIMEOUT_MS)
+        # Compute layout box and dispatch a real CDP mouse click (isTrusted === true) without
+        # Locator.click()'s compositor-frame wait, which would hang while the window is minimized.
+        box = locator.filter(visible=True).first.bounding_box(timeout=CLICK_TIMEOUT_MS)
+        if box is None:
+            raise TimeoutError(f"Element has no bounding box: {selector or text}")
+        self._page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
 
     def release_all(self) -> None:
         held, self._held = self._held, set()

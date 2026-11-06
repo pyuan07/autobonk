@@ -86,6 +86,15 @@ class PopupPolicy:
         log.info("team view open over the popup: Tab back to the choice")
         return [ReleaseAll(), Press(MAP_KEY)]
 
+    def close_game_pause(self, now: float) -> list[Command]:
+        """Resume gameplay when the in-game pause menu (.pz-pill) is open."""
+        pause_state = ("game_pause", (), False)
+        if self._answered and self._answered[0] == pause_state and now - self._answered[1] < POPUP_RETRY_S:
+            return []
+        self._answered = (pause_state, now)
+        log.info("in-game pause menu open (.pz-pill): Escape to resume")
+        return [ReleaseAll(), Press("Escape")]
+
     def answer(self, popup: Popup, now: float) -> list[Command]:
         """Answer an open popup. If the key was missed after POPUP_RETRY_S, try again."""
         popup_state = (popup.title, tuple(c.name for c in popup.cards), popup.in_banish)

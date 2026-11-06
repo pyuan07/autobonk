@@ -116,6 +116,7 @@ class Observation:
     total_zones: int | None = None
     is_sanctuary: bool = False
     can_restart: bool = False
+    game_paused: bool = False
 
     @property
     def seconds_left(self) -> int | None:
@@ -140,7 +141,7 @@ class Observation:
 
     @property
     def recognised(self) -> bool:
-        return self.end_screen is not None or self.countdown is not None or self.popup is not None
+        return self.end_screen is not None or self.countdown is not None or self.popup is not None or self.game_paused
 
 
 def _zone_info(html: str, texts: list[str]) -> tuple[str | None, int | None, int | None, bool]:
@@ -221,6 +222,7 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
     boss_down = any(BOSS_DOWN.fullmatch(t) for t in texts)
     gold, ball_price = _wallet(frame.dom_snapshot)
     can_restart = ("button", RESTART_BUTTON) in nodes
+    game_paused = _is_game_paused(frame.dom_snapshot)
 
     return Observation(
         end_screen=end_screen,
@@ -245,6 +247,7 @@ def perceive(frame: Frame, targets: tuple[str, ...] = ()) -> Observation:
         gold=gold,
         ball_price=ball_price,
         can_restart=can_restart,
+        game_paused=game_paused,
     )
 
 
@@ -358,6 +361,19 @@ def _cards(
                 in_plan=last.in_plan or ("在你的计划中" in text),
             )
     return tuple(keyless)
+
+
+PAUSE_PANEL = re.compile(
+    r'(?:(<div[^>]*class="[^"]*\bmodal\b[^"]*"[^>]*>)\s*)?<div[^>]*class="[^"]*\bpanel\b[^"]*\bpz\b[^"]*"[^>]*>'
+)
+
+
+def _is_game_paused(html: str) -> bool:
+    """The in-game pause menu (.modal > .panel.pz) is open and shown. A hidden or fading menu is a dead
+    node: pressing Escape for it would open the menu instead of closing it."""
+    return any(
+        is_dom_visible(m.group(0)) and "pz-pill" in html[m.end() : m.end() + 2000] for m in PAUSE_PANEL.finditer(html)
+    )
 
 
 def is_dom_visible(style_or_tag: str) -> bool:

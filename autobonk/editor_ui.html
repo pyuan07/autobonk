@@ -3,90 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PokéBonk 权重配置</title>
+  <title>PokéBonk 卡牌配置</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/ui.css">
   <style>
     :root {
-      --bg: #1b1e2e;
-      --panel: #232739;
-      --panel-2: #2b3046;
-      --line: #353b55;
-      --ink: #e9ecf5;
-      --muted: #9097b0;
-      --faint: #6a7190;
-      --accent: #6f93ff;
-
-      --w-high: #f2c14e;
-      --w-pos: #3cc5a8;
-      --w-neg: #ef5b5b;
-      --w-zero: #6a7190;
-
-      --r-legend: #f2c14e;
-      --r-epic: #c07bff;
-      --r-rare: #4fa3ff;
-      --r-uncommon: #4fd17f;
-      --r-common: #9097b0;
-      --r-move: #ff7a59;
-      --r-vitamin: #8f7bff;
-      --r-blessing: #ff9ecb;
-      --r-other: #e6a23c;
-
-      --num: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
-      --sans: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+      --r-legend: #f2c14e; --r-epic: #c07bff; --r-rare: #4fa3ff; --r-uncommon: #4fd17f; --r-common: #9097b0;
+      --r-move: #ff7a59; --r-vitamin: #8f7bff; --r-blessing: #ff9ecb; --r-other: #e6a23c;
     }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { color-scheme: dark; }
-    body {
-      font: 14px/1.5 var(--sans);
-      background: var(--bg);
-      color: var(--ink);
-      min-height: 100vh;
-    }
-    button, input, select { font: inherit; color: inherit; }
-    button { cursor: pointer; }
-    [hidden] { display: none !important; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-
-    .nav-links { display: flex; align-items: center; gap: 6px; }
-    .nav-item { padding: 6px 12px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
-    .nav-item:hover { color: var(--ink); background: var(--panel-2); }
-    .nav-item.active { color: var(--ink); background: var(--panel-2); border-color: var(--line); color: var(--accent); font-weight: 600; }
-
-    /* ---------- Top bar ---------- */
-    .topbar {
-      position: sticky; top: 0; z-index: 50;
-      display: flex; align-items: center; gap: 16px;
-      padding: 10px 20px;
-      background: rgba(27, 30, 46, 0.92);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--line);
-    }
-    .topbar h1 { font: 600 17px/1.2 var(--num); letter-spacing: 0.01em; white-space: nowrap; }
-    .topbar .path { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    .topbar .spacer { flex: 1; }
-    .sync { font-size: 13px; color: var(--muted); white-space: nowrap; }
-    .sync.dirty { color: var(--w-high); }
-    .btn {
-      border: 1px solid var(--line); background: var(--panel-2);
-      padding: 6px 14px; border-radius: 8px; font-size: 13px;
-    }
-    .btn:hover { border-color: var(--faint); }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d1430; font-weight: 600; }
-    .btn-primary:hover { filter: brightness(1.08); }
-    .btn-primary:disabled { opacity: 0.6; cursor: default; }
-    .btn-primary.dirty { background: var(--w-high); border-color: var(--w-high); color: #2a1f00; }
-    kbd { font: 11px var(--num); opacity: 0.7; margin-left: 6px; }
 
     /* ---------- Layout ---------- */
     .layout {
       display: grid; grid-template-columns: 264px minmax(0, 1fr);
       gap: 20px; padding: 20px; max-width: 1440px; margin: 0 auto;
     }
-    aside { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 72px; align-self: start; max-height: calc(100vh - 92px); overflow: auto; }
-    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    aside { display: flex; flex-direction: column; gap: 16px; position: sticky; top: calc(var(--topbar-h) + 16px); align-self: start; max-height: calc(100vh - var(--topbar-h) - 32px); overflow: auto; }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
     .panel h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+    .config-path { font-size: 11.5px; color: var(--faint); word-break: break-all; padding: 0 4px; }
     .panel .hint { font-size: 12px; color: var(--faint); margin-top: 8px; }
 
     /* Profiles */
@@ -97,22 +31,22 @@
       padding: 7px 10px; border-radius: 8px; border: 1px solid transparent;
       background: none; text-align: left;
     }
-    .profile:hover { background: var(--panel-2); }
-    .profile.selected { background: var(--panel-2); border-color: var(--accent); }
+    .profile:hover { background: var(--surface-2); }
+    .profile.selected { background: var(--surface-2); border-color: var(--accent); }
     .profile .pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .profile .pcount { font: 12px var(--num); color: var(--faint); }
-    .tag-active { font-size: 11px; font-weight: 700; color: #0d2a1f; background: var(--w-pos); padding: 0 6px; border-radius: 4px; }
+    .tag-active { font-size: 11px; font-weight: 700; color: #062219; background: var(--ok); padding: 0 6px; border-radius: 4px; }
     .profile-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
     .profile-actions .btn { padding: 4px 10px; font-size: 12px; }
     .link-btn { background: none; border: none; color: var(--muted); font-size: 12px; padding: 2px 6px; border-radius: 4px; }
-    .link-btn:hover { color: var(--ink); background: var(--panel-2); }
+    .link-btn:hover { color: var(--ink); background: var(--surface-2); }
     .link-btn.danger:hover { color: var(--w-neg); }
 
     /* Rarity order */
     .rarity-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
     .rarity-list li {
       display: flex; align-items: center; gap: 8px;
-      padding: 3px 4px 3px 10px; border-radius: 6px; background: var(--panel-2);
+      padding: 3px 4px 3px 10px; border-radius: 6px; background: var(--surface-2);
     }
     .rarity-list .rank { font: 13px var(--num); color: var(--faint); width: 14px; }
     .rarity-list .rname { flex: 1; color: var(--rc); }
@@ -122,7 +56,7 @@
 
     /* Summary */
     .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .summary div { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
+    .summary div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
     .summary b { display: block; font: 600 20px/1.1 var(--num); }
     .summary span { font-size: 12px; color: var(--muted); }
 
@@ -131,22 +65,22 @@
     .toolbar-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .search { flex: 1; min-width: 200px; position: relative; }
     .search input {
-      width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      width: 100%; background: var(--surface); transition: border-color .15s, box-shadow .15s; border: 1px solid var(--line); border-radius: 8px;
       padding: 8px 36px 8px 12px; outline: none;
     }
-    .search input:focus { border-color: var(--accent); }
-    .search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin: 0; }
-    select.sort { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+    .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .search kbd { opacity: .5; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin: 0; }
+    select.sort { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 
-    .segments { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; flex-wrap: wrap; align-self: flex-start; }
+    .segments { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; flex-wrap: wrap; align-self: flex-start; }
     .segments button { background: none; border: none; padding: 5px 12px; border-radius: 7px; color: var(--muted); font-size: 13px; }
     .segments button:hover { color: var(--ink); }
-    .segments button.on { background: var(--panel-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+    .segments button.on { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
     .segments .n { font: 12px var(--num); color: var(--faint); margin-left: 5px; }
     .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--muted); }
     .chip { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
     .chip:hover { color: var(--ink); }
-    .chip.on { border-color: var(--accent); color: var(--ink); background: rgba(111, 147, 255, 0.12); }
+    .chip.on { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
 
     .notice {
       background: rgba(255, 158, 203, 0.07); border: 1px solid rgba(255, 158, 203, 0.28);
@@ -156,7 +90,7 @@
 
     /* ---------- Tiers + rows ---------- */
     .tier { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; margin-bottom: 20px; }
-    .tier-label { text-align: right; padding-top: 6px; position: sticky; top: 72px; align-self: start; }
+    .tier-label { text-align: right; padding-top: 6px; position: sticky; top: calc(var(--topbar-h) + 16px); align-self: start; }
     .tier-label b { display: block; font: 700 34px/1 var(--num); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
     .tier-label span { font-size: 12px; color: var(--faint); }
     .tier.high .tier-label b { color: var(--w-high); }
@@ -166,14 +100,15 @@
     .rows { display: flex; flex-direction: column; gap: 6px; }
 
     .row {
+      transition: border-color .15s;
       display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 12px; align-items: center;
-      background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 10px 0;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px 11px 0;
       overflow: hidden;
     }
-    .row:hover { border-color: #464d6b; }
+    .row:hover { border-color: var(--line-strong); }
     .row .edge { align-self: stretch; margin: -10px 0; background: var(--rc, var(--faint)); }
-    .row.w-neg { background: color-mix(in srgb, var(--w-neg) 6%, var(--panel)); }
-    .row.w-high { background: color-mix(in srgb, var(--w-high) 5%, var(--panel)); }
+    .row.w-neg { background: color-mix(in srgb, var(--w-neg) 5%, var(--surface)); }
+    .row.w-high { background: color-mix(in srgb, var(--w-high) 3%, var(--surface)); }
     .row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
     .row-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
     .row-title .name { font-weight: 600; font-size: 15px; }
@@ -185,7 +120,7 @@
     .badge.dmg.spec { --rc: #74c0fc; }
     .badge.tag-own { --rc: #e8b64c; }
     .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; font-size: 12px; color: var(--muted); }
-    .stats b { font: 600 12.5px var(--num); color: var(--text); margin-left: 4px; }
+    .stats b { font: 600 12.5px var(--num); color: var(--ink); margin-left: 4px; }
     .desc { font-size: 12.5px; color: var(--muted); max-width: 80ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
     .inherit { font-size: 12px; color: var(--faint); }
 
@@ -196,81 +131,13 @@
       background: none; border: 1px solid var(--line); color: var(--muted);
     }
     .presets button:hover { color: var(--ink); border-color: var(--faint); }
-    .presets button.cur { color: var(--bg); border-color: transparent; background: var(--wc); font-weight: 600; }
-    .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-    .stepper button { background: var(--panel-2); border: none; width: 28px; height: 30px; color: var(--muted); font-size: 16px; }
-    .stepper button:hover { color: var(--ink); background: var(--line); }
-    .stepper input {
-      width: 46px; height: 30px; text-align: center; border: none; background: var(--bg);
-      font: 700 16px var(--num); color: var(--wc); outline: none; -moz-appearance: textfield;
-    }
-    .stepper input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
-    .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; }
-    .w-high { --wc: var(--w-high); }
-    .w-pos { --wc: var(--w-pos); }
-    .w-neg { --wc: var(--w-neg); }
-    .w-zero { --wc: var(--w-zero); }
-
+    .presets button.cur { color: #0b0e18; border-color: transparent; background: var(--wc); font-weight: 600; }
     .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
     .empty .btn { margin-top: 12px; }
-
-    /* ---------- Dialogs / toast ---------- */
-    dialog {
-      margin: auto; width: min(460px, calc(100vw - 32px));
-      background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 20px;
-    }
-    dialog::backdrop { background: rgba(10, 12, 20, 0.6); backdrop-filter: blur(3px); }
-    dialog h2 { font-size: 16px; margin-bottom: 14px; }
-    .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
-    .field label { font-size: 12px; color: var(--muted); }
-    .field input, .field select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-    .field small { font-size: 12px; color: var(--faint); }
-    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
-
-    .toast {
-      position: fixed; bottom: 20px; left: 50%; transform: translate(-50%, 16px); opacity: 0;
-      background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--w-pos);
-      padding: 10px 16px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-      transition: opacity 0.2s, transform 0.2s; z-index: 100; pointer-events: none; max-width: calc(100vw - 32px);
-    }
-    .toast.show { opacity: 1; transform: translate(-50%, 0); }
-    .toast.error { border-left-color: var(--w-neg); }
-
-    
-    /* ---------- Live Telemetry Panel ---------- */
-    .live-panel {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
-      display: flex; flex-direction: column; gap: 10px;
-    }
-    .live-badge {
-      display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px;
-      padding: 3px 8px; border-radius: 6px; width: fit-content;
-    }
-    .live-badge.running { background: rgba(60, 197, 168, 0.2); color: var(--w-pos); border: 1px solid var(--w-pos); }
-    .live-badge.paused { background: rgba(242, 193, 78, 0.2); color: var(--w-high); border: 1px solid var(--w-high); }
-    .live-badge.offline { background: rgba(144, 151, 176, 0.2); color: var(--muted); border: 1px solid var(--line); }
-    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-    .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
-    .live-cell { background: var(--panel-2); border-radius: 6px; padding: 6px 8px; }
-    .live-cell span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
-    .live-cell b { font: 600 13px var(--num); color: var(--ink); }
-    .live-controls { display: flex; gap: 8px; margin-top: 4px; }
-    .btn-live-toggle { flex: 1; font-weight: 600; padding: 8px 10px; }
-    .live-logs {
-      background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px;
-      font: 11px/1.4 var(--num); color: var(--muted); max-height: 140px; overflow-y: auto;
-      white-space: pre-wrap; word-break: break-all;
-    }
 
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; padding: 16px; }
       aside { position: static; max-height: none; }
-      .topbar { padding: 10px 16px; }
-      .topbar .path, .topbar kbd { display: none; }
-      .topbar { gap: 10px; }
-      .topbar h1 { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-      .topbar .btn-primary { flex-shrink: 0; white-space: nowrap; }
-      .sync:not(.dirty) { display: none; }
       .row { grid-template-columns: 4px minmax(0, 1fr); }
       .controls { grid-column: 2; flex-wrap: wrap; }
       .tier { grid-template-columns: 1fr; gap: 6px; }
@@ -281,74 +148,16 @@
 </head>
 <body>
 
-  <header class="topbar">
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-      <h1>PokéBonk 卡牌配置</h1>
-      <nav class="nav-links">
-        <a href="/" class="nav-item">📊 运行仪表盘</a>
-        <a href="/cards" class="nav-item active">🎴 卡牌权重配置</a>
-        <a href="/targets" class="nav-item">🎯 地图目标设置</a>
-      </nav>
+  <header class="topbar" data-page="cards">
+    <div class="save-group">
+      <span class="sync" id="syncState">已同步</span>
+      <button class="btn btn-primary btn-save" id="saveBtn">保存 <kbd>Ctrl S</kbd></button>
     </div>
-    <span class="path" id="configPath"></span>
-    <span class="spacer"></span>
-    <span class="sync" id="syncState">已同步</span>
-    <button class="btn btn-primary" id="saveBtn">保存<kbd>Ctrl S</kbd></button>
   </header>
+  <script src="/static/ui.js"></script>
 
   <div class="layout">
     <aside>
-      <section class="live-panel" id="livePanel">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h2>实时运行状态</h2>
-          <div class="live-badge offline" id="liveBadge">
-            <span class="live-dot"></span>
-            <span id="liveBadgeText">未连接</span>
-          </div>
-        </div>
-        <div class="live-grid" style="grid-template-columns: repeat(2, 1fr);">
-          <div class="live-cell">
-            <span>当前目标</span>
-            <b id="liveTarget">-</b>
-          </div>
-          <div class="live-cell">
-            <span>等级与倒计时</span>
-            <b id="liveLevelTime">-</b>
-          </div>
-          <div class="live-cell">
-            <span>头目战状态 (Boss)</span>
-            <b id="liveBoss">-</b>
-          </div>
-          <div class="live-cell">
-            <span>导航与模式</span>
-            <b id="liveNavMode">-</b>
-          </div>
-          <div class="live-cell">
-            <span>所在区域</span>
-            <b id="liveZone">-</b>
-          </div>
-          <div class="live-cell">
-            <span>目标距离</span>
-            <b id="liveDistance">-</b>
-          </div>
-          <div class="live-cell">
-            <span>当前按键</span>
-            <b id="liveHeld">-</b>
-          </div>
-          <div class="live-cell">
-            <span>单步耗时</span>
-            <b id="liveStepMs">- ms</b>
-          </div>
-        </div>
-        <div class="live-controls">
-          <button class="btn btn-primary btn-live-toggle" id="liveToggleBtn" onclick="toggleBotLive()">启动机器人</button>
-        </div>
-        <div>
-          <div style="font-size:11px; color:var(--muted); margin-bottom:4px;">实时执行日志</div>
-          <div class="live-logs" id="liveLogs">等待连接...</div>
-        </div>
-      </section>
-
       <section class="panel">
         <h2>配置方案</h2>
         <div class="profiles" id="profiles"></div>
@@ -374,6 +183,7 @@
           <div><b id="sumOverride" style="color:var(--accent)">0</b><span>专属覆盖</span></div>
         </div>
       </section>
+      <p class="config-path" id="configPath"></p>
     </aside>
 
     <main>
@@ -450,7 +260,6 @@
     </form>
   </dialog>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
     const BASE = '__baseline__';
@@ -480,8 +289,7 @@
       dirty: false,
     };
 
-    const $ = id => document.getElementById(id);
-    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const { $, esc, toast, syncState } = window.Bonk;
 
     // ---------- Weights ----------
     const isOverride = name => state.selected !== BASE && name in (state.profiles[state.selected] || {});
@@ -759,16 +567,12 @@
     // ---------- Dirty / save ----------
     function markDirty() {
       state.dirty = true;
-      $('syncState').textContent = '有未保存的修改';
-      $('syncState').classList.add('dirty');
-      $('saveBtn').classList.add('dirty');
+      syncState(true);
     }
 
     function markSaved() {
       state.dirty = false;
-      $('syncState').textContent = '已保存';
-      $('syncState').classList.remove('dirty');
-      $('saveBtn').classList.remove('dirty');
+      syncState(false, '已保存');
     }
 
     async function save() {
@@ -795,16 +599,6 @@
       } finally {
         btn.disabled = false;
       }
-    }
-
-    let toastTimer;
-    function toast(msg, isError = false) {
-      const t = $('toast');
-      t.textContent = msg;
-      t.classList.toggle('error', isError);
-      t.classList.add('show');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => t.classList.remove('show'), isError ? 6000 : 2500);
     }
 
     // ---------- Events ----------
@@ -930,98 +724,6 @@
     window.addEventListener('beforeunload', e => { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
     
-    let botConnected = false;
-    let botPaused = true;
-
-    async function pollLiveStatus() {
-      try {
-        const res = await fetch('/api/status');
-        if (!res.ok) throw new Error('status error');
-        const s = await res.json();
-        botConnected = s.connected;
-        botPaused = s.paused;
-
-        const badge = $('liveBadge');
-        const badgeText = $('liveBadgeText');
-        const toggleBtn = $('liveToggleBtn');
-
-        if (!botConnected) {
-          badge.className = 'live-badge offline';
-          badgeText.textContent = '未启动';
-          toggleBtn.disabled = true;
-          toggleBtn.textContent = '未连接到游戏';
-        } else if (botPaused) {
-          badge.className = 'live-badge paused';
-          badgeText.textContent = '已暂停 (F8)';
-          toggleBtn.disabled = false;
-          toggleBtn.textContent = '恢复运行';
-          toggleBtn.className = 'btn btn-primary btn-live-toggle';
-        } else {
-          badge.className = 'live-badge running';
-          badgeText.textContent = '运行中';
-          toggleBtn.disabled = false;
-          toggleBtn.textContent = '暂停机器人';
-          toggleBtn.className = 'btn btn-live-toggle';
-        }
-
-        let targetText = s.target || (s.charging ? '符文祭坛充能中' : '探索漫游');
-        if (s.stuck_seconds > 1.0) {
-          targetText += ` (脱困中 ${s.stuck_seconds}s)`;
-        }
-        $('liveTarget').textContent = targetText;
-
-        const levelStr = s.level != null ? `Lv ${s.level}` : 'Lv -';
-        const countStr = s.countdown ? s.countdown : '--:--';
-        $('liveLevelTime').textContent = `${levelStr} | ${countStr}`;
-
-        let bossText = '等待中';
-        if (s.boss_phase === 'fighting') {
-          bossText = '⚔️ 战斗中';
-        } else if (s.boss_phase === 'beaten') {
-          bossText = '✅ 已击败';
-        } else if (s.boss_ready) {
-          bossText = '🎯 条件已达成 (锁定中)';
-        } else {
-          bossText = '⏳ 条件未达成';
-        }
-        $('liveBoss').textContent = bossText;
-
-        const navModeText = s.nav_mode === 'zonemap' ? '🗺️ 全图地图 (Tab)' : '🧭 小地图';
-        $('liveNavMode').textContent = navModeText;
-
-        $('liveZone').textContent = s.zone || '游戏中';
-        $('liveDistance').textContent = s.target_distance != null ? `${Math.round(s.target_distance)} px` : '-';
-        $('liveHeld').textContent = (s.held_keys && s.held_keys.length > 0) ? s.held_keys.join(', ') : '无';
-        $('liveStepMs').textContent = s.step_duration_ms ? `${s.step_duration_ms} ms` : '-';
-
-        if (s.recent_logs && s.recent_logs.length > 0) {
-          const logsEl = $('liveLogs');
-          logsEl.textContent = s.recent_logs.slice(-15).join('\n');
-          logsEl.scrollTop = logsEl.scrollHeight;
-        }
-      } catch (err) {
-        // server might be restarting
-      }
-    }
-
-    async function toggleBotLive() {
-      if (!botConnected) return;
-      const nextAction = botPaused ? 'start' : 'pause';
-      try {
-        await fetch('/api/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: nextAction })
-        });
-        setTimeout(pollLiveStatus, 200);
-      } catch (err) {
-        toast('操作失败: ' + err, true);
-      }
-    }
-
-    setInterval(pollLiveStatus, 1000);
-    setTimeout(pollLiveStatus, 200);
-
     init();
   </script>
 </body>

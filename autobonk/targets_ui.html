@@ -5,263 +5,353 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PokéBonk 地图目标</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/ui.css">
   <style>
-    :root {
-      --bg: #1b1e2e;
-      --panel: #232739;
-      --panel-2: #2b3046;
-      --line: #353b55;
-      --ink: #e9ecf5;
-      --muted: #9097b0;
-      --faint: #6a7190;
-      --accent: #6f93ff;
-      --w-high: #f2c14e;
-      --w-pos: #3cc5a8;
-      --w-zero: #6a7190;
-      --w-neg: #ef5b5b;
-      --num: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
-      --sans: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", system-ui, sans-serif;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { color-scheme: dark; }
-    body { font: 14px/1.5 var(--sans); background: var(--bg); color: var(--ink); min-height: 100vh; }
-    button, input { font: inherit; color: inherit; }
-    button { cursor: pointer; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 48px; display: flex; flex-direction: column; gap: 22px; }
+    .overview { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 18px 20px; align-items: start; }
+    .overview h1 { font-size: 18px; font-weight: 700; }
+    .overview p { color: var(--muted); font-size: 13px; margin-top: 4px; max-width: 70ch; }
+    .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 14px; }
+    .rule { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 12.5px; color: var(--muted); }
+    .rule b { color: var(--ink); font-weight: 600; display: block; font-size: 13px; margin-bottom: 1px; }
+    .rule .ico { font-size: 18px; line-height: 1.2; }
+    .stats { display: flex; gap: 8px; }
+    .stat { padding: 10px 14px; border-radius: 10px; background: var(--surface-2); min-width: 96px; }
+    .stat b { display: block; font: 700 22px/1.1 var(--num); }
+    .stat span { font-size: 11.5px; color: var(--muted); }
+    .stat.cost b { color: var(--warn); }
+    .path { font-size: 11.5px; color: var(--faint); margin-top: 12px; word-break: break-all; }
 
-    .nav-links { display: flex; align-items: center; gap: 6px; }
-    .nav-item { padding: 6px 12px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
-    .nav-item:hover { color: var(--ink); background: var(--panel-2); }
-    .nav-item.active { color: var(--ink); background: var(--panel); border-color: var(--line); }
+    .boss { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 22px; padding: 18px 20px; align-items: center; }
+    .boss-img { width: 72px; height: 72px; border-radius: 50%; border: 3px solid var(--danger); background: #fff; image-rendering: pixelated; box-shadow: 0 0 0 6px var(--danger-soft); }
+    .boss-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .boss-head h2 { font-size: 15px; }
+    .zones { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .zone { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .zone-title { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .zone label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+    .zone .or { font-size: 11px; color: var(--faint); text-align: center; margin: -4px 0; }
+    .boss .hint { margin-top: 10px; }
 
-    .topbar {
-      position: sticky; top: 0; z-index: 50;
-      display: flex; align-items: center; gap: 16px; padding: 10px 20px;
-      background: rgba(27, 30, 46, 0.92); backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--line);
-    }
-    .topbar h1 { font: 600 17px/1.2 var(--num); white-space: nowrap; }
-    .topbar .path { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    .spacer { flex: 1; }
-    .sync { font-size: 13px; color: var(--muted); white-space: nowrap; }
-    .sync.dirty { color: var(--w-high); }
-    .btn { border: 1px solid var(--line); background: var(--panel-2); padding: 6px 14px; border-radius: 8px; font-size: 13px; text-decoration: none; white-space: nowrap; }
-    .btn:hover { border-color: var(--faint); }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d1430; font-weight: 600; }
-    .btn-primary.dirty { background: var(--w-high); border-color: var(--w-high); color: #2a1f00; }
-    kbd { font: 11px var(--num); opacity: 0.7; margin-left: 6px; }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; top: var(--topbar-h); z-index: 10; padding: 10px 0; margin: -10px 0; background: linear-gradient(var(--bg) 70%, transparent); }
+    .toolbar .input { flex: 1; min-width: 200px; }
+    .seg { display: inline-flex; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+    .seg button { border: none; background: none; padding: 5px 12px; border-radius: 7px; font-size: 13px; color: var(--muted); }
+    .seg button[aria-pressed="true"] { background: var(--surface-3); color: var(--ink); }
+    .seg .n { font: 12px var(--num); color: var(--faint); margin-left: 5px; }
 
-    main { max-width: 1100px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-    .intro { color: var(--muted); font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-    .intro b { color: var(--ink); }
-    h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-
-    .icon {
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      padding: 12px 10px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
-    }
-    .icon img { width: 56px; height: 56px; image-rendering: pixelated; border-radius: 50%; border: 3px solid var(--w-zero); background: #fff; }
-    .icon .name { font-weight: 600; }
-    .icon.off { opacity: 0.55; }
-    .icon.off:hover, .icon.off:focus-within { opacity: 1; }
+    .group { display: flex; flex-direction: column; gap: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 10px; }
+    .icon { padding: 12px; display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, opacity .15s; }
+    .icon:hover { border-color: var(--line-strong); }
+    .icon-head { display: flex; align-items: center; gap: 10px; }
+    .icon img { width: 44px; height: 44px; border-radius: 50%; image-rendering: pixelated; border: 2px solid var(--w-zero); background: #fff; flex-shrink: 0; }
     .icon.on img { border-color: var(--w-pos); }
     .icon.high img { border-color: var(--w-high); }
-    .ends { display: flex; flex-direction: column; gap: 4px; }
-    .ends label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-    .ends label > span:first-child { width: 24px; }
-    .boss { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-    .boss img { width: 64px; height: 64px; image-rendering: pixelated; border-radius: 50%; border: 3px solid var(--w-neg); background: #fff; }
-    .boss table { border-collapse: collapse; }
-    .boss th, .boss td { padding: 4px 10px; text-align: center; font-size: 13px; }
-    .boss th { color: var(--muted); font-weight: 600; }
-    .boss .note { flex: 1; min-width: 220px; color: var(--muted); font-size: 12px; }
-    .stepper { display: flex; align-items: center; gap: 4px; }
-    .stepper button { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); }
-    .stepper button:hover { border-color: var(--faint); }
-    .stepper input {
-      width: 52px; height: 28px; text-align: center; border-radius: 6px; border: 1px solid var(--line);
-      background: var(--bg); font: 600 15px var(--num); font-variant-numeric: tabular-nums;
-    }
-    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
-    .toast.show { opacity: 1; }
-    .toast.error { border-color: var(--w-neg); color: var(--w-neg); }
+    .icon .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .icon.off { opacity: .6; }
+    .icon.off:hover, .icon.off:focus-within { opacity: 1; }
 
-    @media (max-width: 640px) {
-      .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
-      .topbar .path { display: none; }
-      main { padding: 16px; }
-      .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+    .switch { position: relative; width: 34px; height: 20px; flex-shrink: 0; }
+    .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--surface-3); transition: background .15s; pointer-events: none; }
+    .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+    .switch input:checked + span { background: var(--ok); }
+    .switch input:checked + span::after { transform: translateX(14px); background: #fff; }
+    .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .ends { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+    .ends .lab { font-size: 11px; color: var(--faint); text-align: center; }
+    .ends .stepper button { width: 24px; height: 28px; }
+    .ends .stepper input { width: 34px; height: 28px; font-size: 14px; }
+    .ramp { height: 28px; width: 100%; }
+    .ramp line { stroke-width: 2.5; stroke-linecap: round; }
+    .empty { padding: 40px; text-align: center; color: var(--faint); }
+
+    @media (max-width: 860px) {
+      .overview { grid-template-columns: 1fr; }
+      .boss { grid-template-columns: 1fr; justify-items: start; }
+      .zones { grid-template-columns: 1fr; width: 100%; }
+    }
+    @media (max-width: 480px) {
+      main { padding: 14px 12px 40px; }
+      .grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-      <h1>PokéBonk 地图目标</h1>
-      <nav class="nav-links">
-        <a href="/" class="nav-item">📊 运行仪表盘</a>
-        <a href="/cards" class="nav-item">🎴 卡牌权重配置</a>
-        <a href="/targets" class="nav-item active">🎯 地图目标设置</a>
-      </nav>
+  <header class="topbar" data-page="targets">
+    <div class="save-group">
+      <span class="sync" id="syncState">已同步</span>
+      <button class="btn btn-primary btn-save" id="saveBtn">保存 <kbd>Ctrl S</kbd></button>
     </div>
-    <span class="path" id="configPath"></span>
-    <span class="spacer"></span>
-    <span class="sync" id="syncState">已同步</span>
-    <button class="btn btn-primary" id="saveBtn">保存<kbd>Ctrl S</kbd></button>
   </header>
+  <script src="/static/ui.js"></script>
 
   <main>
-    <p class="intro">
-      机器人在小地图（找不到时按住 Tab 看大地图）上寻找这些图标。<b>权重高的先去，同权重先去近的；0 = 不去。</b>
-      <b>开始 → 结束</b>：区域刚开始时用开始权重，随着倒计时减少慢慢变成结束权重（比如精灵球 0 → 6：一开始没钱不去，后面才去）。两个一样就是固定权重。
-      到了祭坛会站在圈里等充能；到了其他目标按 <b>E</b>，按了没反应（比如钱不够）就先跳过这类目标一段时间。
-      每多选一种图标，每一步约多花 15 毫秒识别，只选需要的。
-      <span id="summary"></span>
-    </p>
-    <section>
-      <h2>区域头目</h2>
-      <div class="boss" id="boss"></div>
+    <section class="card overview">
+      <div>
+        <h1>地图目标</h1>
+        <p>机器人在小地图上寻找这些图标（找不到时按住 Tab 看大地图），按权重决定先去哪里。</p>
+        <div class="rules">
+          <div class="rule"><span class="ico">⬆️</span><div><b>权重高的先去</b>同权重先去近的，0 = 不去</div></div>
+          <div class="rule"><span class="ico">📈</span><div><b>开始 → 结束</b>权重随倒计时从开始值渐变到结束值</div></div>
+          <div class="rule"><span class="ico">⌨️</span><div><b>到达后按 E</b>没反应（如钱不够）就暂时跳过这类目标</div></div>
+          <div class="rule"><span class="ico">⛩️</span><div><b>祭坛</b>站在圈里等充能，头目追击时不去</div></div>
+        </div>
+        <div class="path" id="configPath"></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="sumOn">0</b><span>启用目标</span></div>
+        <div class="stat cost" title="每种图标每步约多花 15 毫秒识别"><b id="sumCost">0</b><span>识别耗时 ms/步</span></div>
+      </div>
     </section>
+
+    <section class="card boss" aria-labelledby="bossTitle">
+      <img class="boss-img" id="bossImg" alt="">
+      <div>
+        <div class="boss-head">
+          <h2 id="bossTitle">区域头目</h2>
+          <span class="hint">满足任一条件就去骷髅按 E 召唤，此时头目优先于一切目标</span>
+        </div>
+        <div class="zones" id="zones"></div>
+        <p class="hint">剩余分钟可以是负数：-3 表示超时 +03:00 后才召唤。打赢后（"头目…倒下了！"）不再召唤。</p>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <input class="input" type="search" id="search" placeholder="搜索目标名称（按 / 聚焦）" aria-label="搜索目标">
+      <span class="seg" id="filters" role="group" aria-label="显示">
+        <button type="button" data-filter="all" aria-pressed="true">全部<span class="n" id="nAll"></span></button>
+        <button type="button" data-filter="on" aria-pressed="false">已启用<span class="n" id="nOn"></span></button>
+        <button type="button" data-filter="off" aria-pressed="false">未启用<span class="n" id="nOff"></span></button>
+      </span>
+    </div>
+
     <div id="groups"></div>
   </main>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
+    const { $, esc, toast, syncState } = window.Bonk;
+    const COST_MS = 15;
+    const DEFAULT_ON = 5;
+
     let groups = [];
     let boss = null;
     let dirty = false;
-
-    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    let filter = 'all';
+    const remembered = {};   // last non-zero weights, restored when a target is switched back on
 
     async function init() {
       try {
         const res = await fetch('/api/targets');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         groups = data.groups;
         boss = data.boss;
-        document.getElementById('configPath').textContent = data.config_path;
-        render();
+        $('configPath').textContent = data.config_path;
         renderBoss();
+        render();
       } catch (err) {
-        toast('读取失败：' + err, true);
+        $('groups').innerHTML = `<div class="card empty">读取失败（${esc(err.message)}），确认机器人或编辑器仍在运行后刷新页面。</div>`;
       }
     }
 
+    const icons = () => groups.flatMap((g) => g.icons);
+    const peak = (icon) => Math.max(icon.start, icon.end);
+    const cls = (icon) => peak(icon) >= 8 ? 'on high' : peak(icon) > 0 ? 'on' : 'off';
+    const tier = (w) => w >= 8 ? 'w-high' : w > 0 ? 'w-pos' : 'w-zero';
+
+    // Start→end weight as a tiny line chart (0..10 maps bottom..top).
+    function ramp(icon) {
+      const y = (w) => 24 - (Math.min(10, w) / 10) * 20;
+      return `<svg class="ramp" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="6" y1="${y(icon.start)}" x2="94" y2="${y(icon.end)}" stroke="var(--${tier(peak(icon))})" opacity="${peak(icon) ? 1 : .35}"/>
+      </svg>`;
+    }
+
+    function stepper(icon, end) {
+      const label = `${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重`;
+      return `<span class="stepper ${tier(icon[end])}">
+        <button type="button" data-end="${end}" data-step="-1" aria-label="${label}减 1">−</button>
+        <input type="number" step="1" min="0" data-end="${end}" value="${icon[end]}" aria-label="${label}">
+        <button type="button" data-end="${end}" data-step="1" aria-label="${label}加 1">+</button>
+      </span>`;
+    }
+
+    function cardInner(icon) {
+      return `
+        <div class="icon-head">
+          <img src="/icons/${encodeURIComponent(icon.name)}" alt="" loading="lazy">
+          <span class="name" title="${esc(icon.name)}">${esc(icon.name)}</span>
+          <label class="switch" title="${peak(icon) ? '关闭' : '启用'}">
+            <input type="checkbox" data-toggle ${peak(icon) ? 'checked' : ''} aria-label="启用 ${esc(icon.name)}"><span></span>
+          </label>
+        </div>
+        <div class="ends">
+          <span class="lab">开始</span><span></span><span class="lab">结束</span>
+          ${stepper(icon, 'start')}${ramp(icon)}${stepper(icon, 'end')}
+        </div>`;
+    }
+
+    function matches(icon) {
+      const q = $('search').value.trim();
+      if (q && !icon.name.includes(q)) return false;
+      if (filter === 'on') return peak(icon) > 0;
+      if (filter === 'off') return peak(icon) === 0;
+      return true;
+    }
+
     function render() {
-      document.getElementById('groups').innerHTML = groups.map((g, gi) => `
-        <section style="margin-bottom:20px">
-          <h2>${esc(g.title)}</h2>
-          <div class="grid">${g.icons.map((icon, ii) => `
-            <div class="icon ${cls(icon)}" data-g="${gi}" data-i="${ii}">
-              <img src="/icons/${encodeURIComponent(icon.name)}" alt="">
-              <span class="name">${esc(icon.name)}</span>
-              <div class="ends">${['start', 'end'].map((end) => `
-                <label><span>${end === 'start' ? '开始' : '结束'}</span>
-                  <span class="stepper">
-                    <button type="button" data-end="${end}" data-step="-1" aria-label="${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重减 1">−</button>
-                    <input type="number" step="1" min="0" data-end="${end}" value="${icon[end]}" aria-label="${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重">
-                    <button type="button" data-end="${end}" data-step="1" aria-label="${esc(icon.name)} ${end === 'start' ? '开始' : '结束'}权重加 1">+</button>
-                  </span>
-                </label>`).join('')}
-              </div>
-            </div>`).join('')}
-          </div>
-        </section>`).join('');
+      const html = groups.map((g, gi) => {
+        const shown = g.icons.map((icon, ii) => [icon, ii]).filter(([icon]) => matches(icon));
+        if (!shown.length) return '';
+        const on = g.icons.filter((i) => peak(i) > 0).length;
+        return `
+          <section class="group" style="margin-bottom:22px">
+            <h2 class="section-title">${esc(g.title)} <span class="count">${on} / ${g.icons.length} 启用</span></h2>
+            <div class="grid">${shown.map(([icon, ii]) =>
+              `<div class="card icon ${cls(icon)}" data-g="${gi}" data-i="${ii}">${cardInner(icon)}</div>`).join('')}
+            </div>
+          </section>`;
+      }).join('');
+      $('groups').innerHTML = html || '<div class="card empty">没有符合条件的目标</div>';
       summary();
     }
 
     function renderBoss() {
-      const zones = [0, 1, 2];
-      document.getElementById('boss').innerHTML = `
-        <img src="/icons/${encodeURIComponent(boss.name)}" alt="">
-        <table>
-          <tr><th></th>${zones.map((z) => `<th>区域 ${z + 1}</th>`).join('')}</tr>
-          <tr><th>等级 ≥</th>${zones.map((z) => `<td><span class="stepper"><input type="number" min="1" step="1" data-boss="levels" data-z="${z}" value="${boss.levels[z]}" aria-label="区域 ${z + 1} 打头目的等级"></span></td>`).join('')}</tr>
-          <tr><th>或剩余 ≤ 分钟</th>${zones.map((z) => `<td><span class="stepper"><input type="number" step="0.5" data-boss="minutes_left" data-z="${z}" value="${boss.minutes_left[z]}" aria-label="区域 ${z + 1} 剩余多少分钟就去打头目"></span></td>`).join('')}</tr>
-        </table>
-        <p class="note">等级够了，或者剩余时间不多了，机器人就会去骷髅按 E 召唤头目，这时头目优先于一切目标。剩余分钟支持负数（如 -3 表示超时 +03:00 后才召唤）。头目追着你时不去祭坛（祭坛要站着不动），其他目标照去。打赢后（“头目…倒下了！”）不再召唤。</p>`;
+      $('bossImg').src = '/icons/' + encodeURIComponent(boss.name);
+      $('zones').innerHTML = [0, 1, 2].map((z) => `
+        <div class="zone">
+          <span class="zone-title">区域 ${z + 1}</span>
+          <label>等级 ≥ ${bossStepper('levels', z, 1, `区域 ${z + 1} 召唤头目的等级`)}</label>
+          <span class="or">或</span>
+          <label>剩余 ≤ 分钟 ${bossStepper('minutes_left', z, 0.5, `区域 ${z + 1} 剩余多少分钟就召唤头目`)}</label>
+        </div>`).join('');
     }
 
-    document.getElementById('boss').addEventListener('change', (e) => {
-      const input = e.target.closest('input[data-boss]');
-      if (!input) return;
-      const raw = Number(input.value);
+    function bossStepper(key, z, step, label) {
+      return `<span class="stepper">
+        <button type="button" data-boss="${key}" data-z="${z}" data-step="${-step}" aria-label="${label}减少">−</button>
+        <input type="number" step="${step}" ${key === 'levels' ? 'min="1"' : ''} data-boss="${key}" data-z="${z}" value="${boss[key][z]}" aria-label="${label}" style="width:52px">
+        <button type="button" data-boss="${key}" data-z="${z}" data-step="${step}" aria-label="${label}增加">+</button>
+      </span>`;
+    }
+
+    function setBoss(key, z, raw) {
       const isNum = Number.isFinite(raw);
-      const value = input.dataset.boss === 'levels'
-        ? Math.max(1, isNum ? raw : 1)
-        : (isNum ? raw : 0);
-      boss[input.dataset.boss][input.dataset.z] = value;
-      input.value = value;
+      const value = key === 'levels' ? Math.max(1, isNum ? Math.round(raw) : 1) : (isNum ? raw : 0);
+      boss[key][z] = value;
+      document.querySelector(`input[data-boss="${key}"][data-z="${z}"]`).value = value;
       markDirty(true);
+    }
+
+    $('zones').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-boss]');
+      if (b) setBoss(b.dataset.boss, +b.dataset.z, Number(boss[b.dataset.boss][b.dataset.z]) + Number(b.dataset.step));
+    });
+    $('zones').addEventListener('change', (e) => {
+      const i = e.target.closest('input[data-boss]');
+      if (i) setBoss(i.dataset.boss, +i.dataset.z, Number(i.value));
     });
 
-    function cls(icon) { const w = Math.max(icon.start, icon.end); return w >= 8 ? 'on high' : w > 0 ? 'on' : 'off'; }
-
     function summary() {
-      const on = groups.flatMap((g) => g.icons).filter((i) => Math.max(i.start, i.end) > 0).length;
-      document.getElementById('summary').textContent = `当前会去 ${on} 种目标。`;
+      const all = icons();
+      const on = all.filter((i) => peak(i) > 0).length;
+      $('sumOn').textContent = on;
+      $('sumCost').textContent = '~' + on * COST_MS;
+      $('nAll').textContent = all.length;
+      $('nOn').textContent = on;
+      $('nOff').textContent = all.length - on;
     }
 
-    function setWeight(card, end, value) {
+    // Redraw one card in place so it doesn't vanish from a filtered view mid-edit.
+    function refreshCard(card, focusSel) {
       const icon = groups[card.dataset.g].icons[card.dataset.i];
-      icon[end] = Math.max(0, Number.isFinite(value) ? value : 0);
-      card.className = 'icon ' + cls(icon);
-      card.querySelector(`input[data-end="${end}"]`).value = icon[end];
+      card.className = 'card icon ' + cls(icon);
+      card.innerHTML = cardInner(icon);
+      if (focusSel) card.querySelector(focusSel)?.focus();
       summary();
+    }
+
+    function setWeight(card, end, value, focusSel) {
+      const icon = groups[card.dataset.g].icons[card.dataset.i];
+      icon[end] = Math.max(0, Number.isFinite(value) ? Math.round(value) : 0);
+      if (peak(icon)) remembered[icon.name] = { start: icon.start, end: icon.end };
+      refreshCard(card, focusSel);
       markDirty(true);
     }
 
-    document.getElementById('groups').addEventListener('click', (e) => {
+    $('groups').addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-step]');
       if (!btn) return;
       const card = btn.closest('.icon');
       const end = btn.dataset.end;
-      setWeight(card, end, Number(card.querySelector(`input[data-end="${end}"]`).value) + Number(btn.dataset.step));
+      const icon = groups[card.dataset.g].icons[card.dataset.i];
+      setWeight(card, end, icon[end] + Number(btn.dataset.step), `button[data-end="${end}"][data-step="${btn.dataset.step}"]`);
     });
-    document.getElementById('groups').addEventListener('change', (e) => {
-      if (e.target.matches('input[data-end]')) setWeight(e.target.closest('.icon'), e.target.dataset.end, Number(e.target.value));
+    $('groups').addEventListener('change', (e) => {
+      const card = e.target.closest('.icon');
+      if (!card) return;
+      if (e.target.matches('input[data-end]')) return setWeight(card, e.target.dataset.end, Number(e.target.value));
+      if (e.target.matches('input[data-toggle]')) {
+        const icon = groups[card.dataset.g].icons[card.dataset.i];
+        if (e.target.checked) {
+          const prev = remembered[icon.name] || { start: DEFAULT_ON, end: DEFAULT_ON };
+          icon.start = prev.start; icon.end = prev.end;
+        } else {
+          remembered[icon.name] = { start: icon.start, end: icon.end };
+          icon.start = 0; icon.end = 0;
+        }
+        refreshCard(card, 'input[data-toggle]');
+        markDirty(true);
+      }
     });
+
+    $('filters').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-filter]');
+      if (!b) return;
+      filter = b.dataset.filter;
+      $('filters').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+      render();
+    });
+    let searchTimer;
+    $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 80); });
 
     function markDirty(on) {
       dirty = on;
-      const state = document.getElementById('syncState');
-      state.textContent = on ? '未保存' : '已同步';
-      state.classList.toggle('dirty', on);
-      document.getElementById('saveBtn').classList.toggle('dirty', on);
+      syncState(on);
     }
 
     async function save() {
+      const btn = $('saveBtn');
+      if (btn.disabled || !groups.length) return;
       const weights = {};
-      for (const icon of groups.flatMap((g) => g.icons)) {
-        if (Math.max(icon.start, icon.end) > 0) weights[icon.name] = icon.start === icon.end ? icon.start : [icon.start, icon.end];
+      for (const icon of icons()) {
+        if (peak(icon) > 0) weights[icon.name] = icon.start === icon.end ? icon.start : [icon.start, icon.end];
       }
+      btn.disabled = true;
       try {
         const res = await fetch('/api/targets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ weights, boss: { levels: boss.levels, minutes_left: boss.minutes_left } }),
         });
-        const data = await res.json();
-        if (data.status !== 'ok') throw new Error(data.error);
+        const data = await res.json().catch(() => ({}));
+        if (data.status !== 'ok') throw new Error(data.error || 'HTTP ' + res.status);
         markDirty(false);
-        toast('已保存。重新启动机器人后生效。');
+        toast('已保存，重启机器人后生效。');
       } catch (err) {
-        toast('保存失败：' + err.message, true);
+        toast('保存失败：' + err.message + '。修改仍在页面上，可以再试一次。', true);
+      } finally {
+        btn.disabled = false;
       }
     }
 
-    function toast(msg, isError = false) {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.className = 'toast show' + (isError ? ' error' : '');
-      clearTimeout(t._timer);
-      t._timer = setTimeout(() => (t.className = 'toast'), 2600);
-    }
-
-    document.getElementById('saveBtn').addEventListener('click', save);
+    $('saveBtn').addEventListener('click', save);
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+      else if (e.key === '/' && !e.target.closest('input, select, textarea')) { e.preventDefault(); $('search').focus(); }
     });
     window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
     init();

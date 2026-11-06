@@ -13,17 +13,27 @@ if TYPE_CHECKING:
 
 RECORD_INPUTS_SCRIPT = """
 (() => {
-  window.__autobonkInputs = [];
+  const inputs = [];
   window.addEventListener('keydown', (event) => {
-    if (!event.repeat) window.__autobonkInputs.push({kind: 'key', value: event.key});
+    if (!event.repeat) inputs.push({kind: 'key', value: event.key});
   }, true);
   window.addEventListener('click', (event) => {
     const target = event.target.closest('button') || event.target;
-    window.__autobonkInputs.push({kind: 'click', value: (target.innerText || '').trim()});
+    inputs.push({kind: 'click', value: (target.innerText || '').trim()});
+  }, true);
+  window.addEventListener('auxdrain', (event) => {
+    if (Array.isArray(event.detail)) {
+      event.detail.push(...inputs.splice(0));
+      event.stopImmediatePropagation();
+    }
   }, true);
 })();
 """
-DRAIN_INPUTS_SCRIPT = "() => (window.__autobonkInputs || []).splice(0)"
+DRAIN_INPUTS_SCRIPT = """() => {
+  const out = [];
+  window.dispatchEvent(new CustomEvent('auxdrain', {detail: out}));
+  return out;
+}"""
 VIEW_BUTTONS = {"查看我的队伍"}
 
 

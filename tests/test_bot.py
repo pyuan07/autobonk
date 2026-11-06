@@ -2129,3 +2129,37 @@ def test_match_many_rejects_mixed_template_sizes():
     image = np.zeros((64, 64, 3))
     with pytest.raises(ValueError):
         match_many(image, [np.ones((28, 28, 3)), np.ones((32, 32, 3))])
+
+
+def test_in_game_pause_overlay_resumes_with_escape():
+    pause_html = (
+        '<div id="hud"><div class="timer">9:34</div></div>'
+        '<div class="modal"><div class="panel sm pz">'
+        '<div class="sm-hero pz-hero"><small><i class="pz-pill">暂停</i></small><h2>皮卡丘</h2></div>'
+        "</div></div>"
+    )
+    frame = Frame(b"", pause_html, 10.0, "https://pokebonk.com/")
+    obs = perceive(frame)
+    assert obs.game_paused is True
+
+    bot = Bot()
+    assert bot.step(frame) == [ReleaseAll(), Press("Escape")]
+    assert bot.step(Frame(b"", pause_html, 10.2, "https://pokebonk.com/")) == []
+    assert bot.step(Frame(b"", pause_html, 11.2, "https://pokebonk.com/")) == [ReleaseAll(), Press("Escape")]
+
+
+def test_hidden_or_fading_pause_overlay_is_not_paused():
+    """Escape on a dead pause node would open the menu: hidden/faded panels must be ignored."""
+    for modal_style in ('style="display: none;"', 'style="opacity: 0;"'):
+        html = (
+            f'<div class="modal sm-modal" {modal_style}><div class="panel sm pz">'
+            '<div class="sm-hero pz-hero"><small><i class="pz-pill">暂停</i></small></div></div></div>'
+        )
+        frame = Frame(b"", html, 10.0, "https://pokebonk.com/")
+        assert perceive(frame).game_paused is False
+        assert Press("Escape") not in Bot().step(frame)
+
+
+def test_pause_fixture_is_detected():
+    frame = load_frame(Path("fixtures/frames/frame-20261030-155532-914"))
+    assert perceive(frame).game_paused is True

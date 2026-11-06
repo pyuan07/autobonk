@@ -227,4 +227,4 @@ plan_fallback_reroll_threshold = 7.0
 # The area boss (骷髅): summoned with E in zone N once the level reaches levels[N-1], or once
 # only minutes_left[N-1] are left; then it comes first. While it chases, altars are left.
 levels = [999, 999, 999]
-minutes_left = [4, 7, 7]
+minutes_left = [4, 8, 8]

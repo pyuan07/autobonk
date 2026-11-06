@@ -36,9 +36,10 @@ def run(config_path: Path = Path("autobonk.toml"), open_dashboard: bool = False)
         context = launch(playwright, config)
         page = context.pages[0] if context.pages else context.new_page()
         context.add_init_script(RECORD_INPUTS_SCRIPT)
+        cdp = context.new_cdp_session(page)
+        cdp.send("Emulation.setFocusEmulationEnabled", {"enabled": True})
         page.goto(config.url)
 
-        cdp = context.new_cdp_session(page)
         driver = KeyboardDriver(page.keyboard, page)
         choice_log = ChoiceLog(config.choices_file)
 

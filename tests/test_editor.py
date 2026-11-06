@@ -290,3 +290,28 @@ def test_targets_page_lists_every_icon_with_its_image_and_saves(tmp_path: Path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_pages_share_the_static_stylesheet_and_script(tmp_path: Path):
+    toml_path = tmp_path / "autobonk.toml"
+    toml_path.write_text('[cards.weights]\n"月之石" = 10\n', encoding="utf-8")
+    server, port = serve(toml_path)
+    base = f"http://127.0.0.1:{port}"
+
+    try:
+        for asset, content_type in (("ui.css", "text/css"), ("ui.js", "text/javascript")):
+            with urllib.request.urlopen(f"{base}/static/{asset}") as resp:
+                assert resp.headers["Content-Type"].startswith(content_type)
+                assert resp.read()
+        for page in ("/", "/cards", "/targets"):
+            with urllib.request.urlopen(f"{base}{page}") as resp:
+                html = resp.read().decode("utf-8")
+            assert '/static/ui.css' in html and '/static/ui.js' in html
+        try:
+            urllib.request.urlopen(f"{base}/static/../server.py")
+            raise AssertionError("unlisted static path should 404")
+        except urllib.error.HTTPError as err:
+            assert err.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()

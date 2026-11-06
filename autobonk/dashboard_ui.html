@@ -3,530 +3,438 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PokéBonk 运行控制台与仪表盘</title>
+  <title>PokéBonk 运行仪表盘</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/ui.css">
   <style>
-    :root {
-      --bg: #151824;
-      --panel: #1f2334;
-      --panel-2: #282d43;
-      --line: #343b56;
-      --ink: #edf0f8;
-      --muted: #9aa2c0;
-      --faint: #676e8d;
-      --accent: #6f93ff;
-      --accent-glow: rgba(111, 147, 255, 0.25);
+    main { max-width: 1320px; margin: 0 auto; padding: 22px 20px 40px; display: flex; flex-direction: column; gap: 16px; }
 
-      --w-high: #f2c14e;
-      --w-pos: #3cc5a8;
-      --w-neg: #ef5b5b;
-      --w-purple: #c07bff;
+    /* Offline: keep the layout, grey out the values so stale data never looks live. */
+    main.stale .live { opacity: .4; filter: saturate(.3); }
 
-      --num: "Bahnschrift", "DIN Alternate", "Segoe UI", sans-serif;
-      --sans: "Microsoft YaHei UI", "PingFang SC", "Segoe UI", system-ui, sans-serif;
-    }
+    /* ---------- Hero ---------- */
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 28px; align-items: center; padding: 20px 24px; position: relative; overflow: hidden; }
+    .hero::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--faint); transition: background .3s; }
+    .hero.is-running::after { background: var(--ok); }
+    .hero.is-paused::after { background: var(--warn); }
+    .hero-state { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; }
+    .hero-state .dot { width: 12px; height: 12px; }
+    .hero-desc { margin-top: 4px; color: var(--muted); font-size: 13px; min-height: 20px; }
+    .session { display: flex; gap: 6px; }
+    .session div { min-width: 72px; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); text-align: center; }
+    .session b { display: block; font: 700 20px/1.1 var(--num); font-variant-numeric: tabular-nums; }
+    .session span { font-size: 11.5px; color: var(--muted); }
+    .session .win b { color: var(--ok); }
+    .session .loss b { color: var(--danger); }
+    .btn-hero { padding: 12px 26px; font-size: 15px; font-weight: 700; border-radius: 12px; border: none; min-width: 168px; }
+    .btn-hero svg { width: 16px; height: 16px; }
+    .btn-hero.start { background: var(--ok); color: #062219; box-shadow: 0 6px 20px rgba(52, 209, 166, .28); }
+    .btn-hero.pause { background: var(--warn); color: #2a1f00; box-shadow: 0 6px 20px rgba(245, 196, 81, .28); }
+    .btn-hero:hover:not(:disabled) { filter: brightness(1.08); }
+    .btn-hero:disabled { background: var(--surface-3); color: var(--faint); box-shadow: none; }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { color-scheme: dark; }
-    body {
-      font: 14px/1.5 var(--sans);
-      background: var(--bg);
-      color: var(--ink);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    button, input, select { font: inherit; color: inherit; }
-    button { cursor: pointer; }
-    [hidden] { display: none !important; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* ---------- Run strip ---------- */
+    .strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .tile-label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .tile-val { font: 700 26px/1.1 var(--num); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tile-val small { font-size: 14px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+    .tile-val.warn { color: var(--warn); }
+    .tile-val.danger { color: var(--danger); }
+    .segbar { display: flex; gap: 4px; }
+    .segbar i { flex: 1; height: 4px; border-radius: 4px; background: var(--surface-3); }
+    .segbar i.on { background: var(--accent); }
+    .segbar i.cur { background: linear-gradient(90deg, var(--accent), var(--ok)); }
+    .phases { display: flex; gap: 4px; }
+    .phases i { flex: 1; height: 4px; border-radius: 4px; background: var(--surface-3); }
+    .phases i.on { background: var(--danger); }
+    .phases i.done { background: var(--ok); }
 
-    /* Top navigation bar */
-    .topbar {
-      position: sticky; top: 0; z-index: 50;
-      display: flex; align-items: center; gap: 20px;
-      padding: 12px 24px;
-      background: rgba(21, 24, 36, 0.94);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--line);
-    }
-    .brand {
-      display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px;
-      color: var(--ink); text-decoration: none;
-    }
-    .brand-icon {
-      width: 24px; height: 24px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), var(--w-pos));
-      display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; color: #0f121e;
-    }
-    .nav-links {
-      display: flex; align-items: center; gap: 6px;
-    }
-    .nav-item {
-      padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
-      color: var(--muted); text-decoration: none; transition: all 0.15s ease;
-      border: 1px solid transparent;
-    }
-    .nav-item:hover { color: var(--ink); background: var(--panel-2); }
-    .nav-item.active {
-      color: var(--ink); background: var(--panel); border-color: var(--line);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-    .spacer { flex: 1; }
-    .status-pill {
-      display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
-      padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel);
-    }
-    .status-dot {
-      width: 8px; height: 8px; border-radius: 50%; background: var(--faint);
-    }
-    .status-pill.running .status-dot { background: var(--w-pos); box-shadow: 0 0 8px var(--w-pos); }
-    .status-pill.paused .status-dot { background: var(--w-high); box-shadow: 0 0 8px var(--w-high); }
-    .status-pill.offline .status-dot { background: var(--faint); }
+    /* ---------- Body grid ---------- */
+    .body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+    .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
-    /* Main container */
-    main {
-      flex: 1; max-width: 1320px; width: 100%; margin: 0 auto; padding: 24px 20px;
-      display: flex; flex-direction: column; gap: 20px;
+    .target { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+    .target-head { display: flex; justify-content: space-between; align-items: center; }
+    .target-body { display: flex; align-items: center; gap: 14px; }
+    .avatar {
+      width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-size: 26px;
+      background: var(--surface-2); border: 2px solid var(--line-strong); overflow: hidden;
     }
-
-    /* Hero Banner / Quick Control */
-    .hero-card {
-      background: linear-gradient(145deg, var(--panel), #23283c);
-      border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px;
-      display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-    }
-    .hero-info { display: flex; flex-direction: column; gap: 6px; }
-    .hero-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-    .hero-state {
-      font-size: 26px; font-weight: 800; display: flex; align-items: center; gap: 12px; font-family: var(--num);
-    }
-    .hero-desc { font-size: 13px; color: var(--muted); }
-    .hero-actions { display: flex; align-items: center; gap: 12px; }
-    .btn-toggle {
-      font-size: 15px; font-weight: 700; padding: 12px 28px; border-radius: 10px;
-      border: none; display: inline-flex; align-items: center; gap: 10px; transition: all 0.15s ease;
-    }
-    .btn-toggle.start { background: var(--w-pos); color: #09211a; box-shadow: 0 4px 14px rgba(60, 197, 168, 0.35); }
-    .btn-toggle.start:hover { filter: brightness(1.1); transform: translateY(-1px); }
-    .btn-toggle.pause { background: var(--w-high); color: #281e00; box-shadow: 0 4px 14px rgba(242, 193, 78, 0.35); }
-    .btn-toggle.pause:hover { filter: brightness(1.1); transform: translateY(-1px); }
-
-    /* Target Section: Main & Sub targets */
-    .targets-deck {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px;
-    }
-    .target-card {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-      padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden;
-    }
-    .target-card::before {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: var(--line);
-    }
-    .target-card.main-card::before { background: linear-gradient(90deg, var(--accent), var(--w-purple)); }
-    .target-card.sub-card::before { background: linear-gradient(90deg, var(--w-pos), #73f2db); }
-
-    .card-header {
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .card-header h3 { font-size: 13px; font-weight: 700; color: var(--muted); display: flex; align-items: center; gap: 8px; }
-    .badge {
-      font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
-    }
-    .badge-main { background: rgba(111, 147, 255, 0.18); color: var(--accent); border: 1px solid rgba(111, 147, 255, 0.35); }
-    .badge-sub { background: rgba(60, 197, 168, 0.18); color: var(--w-pos); border: 1px solid rgba(60, 197, 168, 0.35); }
-    .badge-idle { background: var(--panel-2); color: var(--faint); border: 1px solid var(--line); }
-
-    .target-body {
-      display: flex; align-items: center; gap: 16px;
-    }
-    .target-avatar {
-      width: 56px; height: 56px; border-radius: 12px; background: var(--panel-2);
-      border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
-      font-size: 26px; flex-shrink: 0;
-    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; background: #fff; }
+    .target.main .avatar.has-img { border-color: var(--accent); }
+    .target.sub .avatar.has-img { border-color: var(--ok); }
     .target-info { flex: 1; min-width: 0; }
-    .target-name { font-size: 19px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .target-detail { font-size: 12px; color: var(--muted); margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
-    .target-dist { font-family: var(--num); font-weight: 700; color: var(--w-pos); font-size: 14px; }
+    .target-name { font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .target-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+    .target-meta b { font-family: var(--num); color: var(--ink); font-weight: 600; }
+    .target.idle .target-name { color: var(--muted); font-weight: 600; font-size: 16px; }
+    .proximity { height: 4px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+    .proximity i { display: block; height: 100%; width: 0; border-radius: 4px; transition: width .6s ease; }
+    .target.main .proximity i { background: linear-gradient(90deg, var(--accent), var(--purple)); }
+    .target.sub .proximity i { background: linear-gradient(90deg, var(--ok), #8ef0d6); }
 
-    /* Telemetry grid */
-    .telemetry-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px;
-    }
-    .telem-cell {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-      padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;
-    }
-    .telem-label { font-size: 12px; color: var(--muted); }
-    .telem-val { font: 700 18px/1.2 var(--num); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .telem-val.active { color: var(--w-pos); }
-    .telem-val.warning { color: var(--w-high); }
+    .telemetry { padding: 6px 0; }
+    .telemetry dl { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+    .telemetry dt, .telemetry dd { padding: 9px 18px; border-top: 1px solid var(--line); }
+    .telemetry dt:first-of-type, .telemetry dd:first-of-type { border-top: none; }
+    .telemetry dt { font-size: 13px; color: var(--muted); }
+    .telemetry dd { text-align: right; font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .telemetry dd.ok { color: var(--ok); }
+    .telemetry dd.warn { color: var(--warn); }
+    .keys { display: inline-flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+    .keys kbd { opacity: 1; border-color: var(--line-strong); background: var(--surface-2); padding: 3px 7px; font-size: 12px; }
 
-    /* Logs & Commands section */
-    .bottom-layout {
-      display: grid; grid-template-columns: 1fr; gap: 16px;
-    }
-    .console-card {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-      padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;
-    }
-    .console-header {
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .console-title { font-size: 13px; font-weight: 700; color: var(--muted); }
-    .console-actions { display: flex; gap: 8px; }
-    .console-btn {
-      background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
-      padding: 3px 10px; font-size: 12px; color: var(--muted);
-    }
-    .console-btn:hover { color: var(--ink); border-color: var(--faint); }
+    /* ---------- Log ---------- */
+    .log { display: flex; flex-direction: column; min-width: 0; }
+    .log-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .log-head .section-title { margin-right: auto; }
+    .seg { display: inline-flex; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+    .seg button { border: none; background: none; padding: 3px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+    .seg button[aria-pressed="true"] { background: var(--surface-3); color: var(--ink); }
+    .log-search { width: 140px; padding: 4px 9px; font-size: 12px; }
+    .log-wrap { position: relative; }
     .log-stream {
-      background: #11131c; border: 1px solid #232738; border-radius: 8px; padding: 12px 14px;
-      font: 12px/1.6 "Cascadia Code", "Consolas", var(--num), monospace; color: #a4adc9;
-      height: 280px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+      height: 520px; overflow-y: auto; padding: 10px 0;
+      font: 12px/1.65 var(--mono); color: #b3bad0; background: rgba(0,0,0,.18);
+      border-radius: 0 0 var(--radius) var(--radius);
     }
-    .log-line { margin-bottom: 2px; }
-    .log-time { color: var(--faint); margin-right: 6px; }
-    .log-tag-target { color: var(--accent); font-weight: 600; }
-    .log-tag-boss { color: var(--w-neg); font-weight: 600; }
-    .log-tag-sub { color: var(--w-pos); font-weight: 700; }
+    .log-line { display: flex; gap: 10px; padding: 0 18px; white-space: pre-wrap; word-break: break-all; }
+    .log-line:hover { background: rgba(255,255,255,.025); }
+    .log-time { color: var(--faint); flex-shrink: 0; }
+    .log-line.cmd { color: #7d849a; }
+    .log-line.target .tag { color: var(--accent); font-weight: 700; }
+    .log-line.boss .tag { color: var(--danger); font-weight: 700; }
+    .log-line .sub { color: var(--ok); font-weight: 700; }
+    .log-empty { padding: 40px 18px; text-align: center; color: var(--faint); font-family: var(--sans); }
+    .jump {
+      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+      box-shadow: 0 8px 20px rgba(0,0,0,.4);
+    }
 
-    @media (max-width: 768px) {
-      .topbar { padding: 10px 16px; gap: 12px; }
-      main { padding: 16px 12px; }
-      .targets-deck { grid-template-columns: 1fr; }
-      .hero-card { flex-direction: column; align-items: flex-start; }
-      .btn-toggle { width: 100%; justify-content: center; }
+    @media (max-width: 1100px) {
+      .body { grid-template-columns: 1fr; }
+      .log-stream { height: 380px; }
+    }
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; gap: 16px; }
+      .btn-hero { width: 100%; }
+      .strip { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      main { padding: 14px 12px 32px; }
+      .session div { min-width: 0; flex: 1; }
+      .tile-val { font-size: 22px; }
     }
   </style>
 </head>
 <body>
+  <header class="topbar" data-page="dashboard"></header>
+  <script src="/static/ui.js"></script>
 
-  <header class="topbar">
-    <a href="/" class="brand">
-      <div class="brand-icon">B</div>
-      <span>PokéBonk</span>
-    </a>
-    <nav class="nav-links">
-      <a href="/" class="nav-item active">📊 运行仪表盘</a>
-      <a href="/cards" class="nav-item">🎴 卡牌权重配置</a>
-      <a href="/targets" class="nav-item">🎯 地图目标设置</a>
-    </nav>
-    <div class="spacer"></div>
-    <div class="status-pill offline" id="statusPill">
-      <span class="status-dot"></span>
-      <span id="statusPillText">未连接</span>
+  <main id="main" class="stale">
+    <section class="card hero is-offline" id="hero">
+      <div>
+        <div class="hero-state"><span class="dot"></span><span id="heroState">正在连接…</span></div>
+        <div class="hero-desc" id="heroDesc">正在从本地控制器读取状态</div>
+      </div>
+      <div class="session live" aria-label="本次运行统计">
+        <div><b id="statRuns">0</b><span>局数</span></div>
+        <div class="win"><b id="statWins">0</b><span>胜</span></div>
+        <div class="loss"><b id="statLosses">0</b><span>负</span></div>
+        <div><b id="statRate">—</b><span>胜率</span></div>
+      </div>
+      <button class="btn btn-hero start" id="heroBtn" disabled></button>
+    </section>
+
+    <section class="strip live" aria-label="本局进度">
+      <div class="card tile">
+        <span class="tile-label">区域</span>
+        <span class="tile-val" id="zoneVal">—</span>
+        <span class="segbar" id="zoneBar"><i></i><i></i><i></i></span>
+      </div>
+      <div class="card tile">
+        <span class="tile-label">等级</span>
+        <span class="tile-val" id="levelVal">—</span>
+      </div>
+      <div class="card tile">
+        <span class="tile-label">剩余时间 <span class="pill danger" id="overtimePill" hidden>超时</span></span>
+        <span class="tile-val" id="timeVal">--:--</span>
+      </div>
+      <div class="card tile">
+        <span class="tile-label">区域头目 <span class="pill" id="bossPill">等待</span></span>
+        <span class="tile-val" id="bossVal" style="font-size:18px; line-height:1.6">—</span>
+        <span class="phases" id="bossBar"><i></i><i></i><i></i></span>
+      </div>
+    </section>
+
+    <div class="body">
+      <div class="col live">
+        <section class="card target main" id="mainCard">
+          <div class="target-head">
+            <span class="section-title">主目标</span>
+            <span class="pill accent" id="mainPill">巡航</span>
+          </div>
+          <div class="target-body">
+            <div class="avatar" id="mainAvatar">🧭</div>
+            <div class="target-info">
+              <div class="target-name" id="mainName">—</div>
+              <div class="target-meta">
+                <span>距离 <b id="mainDist">—</b></span>
+                <span>导航 <b id="navMode">—</b></span>
+              </div>
+            </div>
+          </div>
+          <div class="proximity" aria-hidden="true"><i id="mainProx"></i></div>
+        </section>
+
+        <section class="card target sub idle" id="subCard">
+          <div class="target-head">
+            <span class="section-title">顺路目标</span>
+            <span class="pill" id="subPill">无</span>
+          </div>
+          <div class="target-body">
+            <div class="avatar" id="subAvatar">✨</div>
+            <div class="target-info">
+              <div class="target-name" id="subName">沿途没有值得绕路的物品</div>
+              <div class="target-meta" id="subMeta"><span>直奔主目标</span></div>
+            </div>
+          </div>
+          <div class="proximity" aria-hidden="true"><i id="subProx"></i></div>
+        </section>
+
+        <section class="card telemetry">
+          <dl>
+            <dt>祭坛</dt><dd id="chargeVal">—</dd>
+            <dt>防卡监测</dt><dd id="stuckVal">—</dd>
+            <dt>当前按键</dt><dd id="keysVal">—</dd>
+            <dt>决策周期</dt><dd id="stepVal">—</dd>
+            <dt>控制器状态</dt><dd id="statusText" style="color:var(--muted); font-weight:500">—</dd>
+          </dl>
+        </section>
+      </div>
+
+      <section class="card log">
+        <div class="log-head">
+          <span class="section-title">实时日志 <span class="count" id="logCount"></span></span>
+          <input class="input log-search" id="logSearch" type="search" placeholder="筛选…" aria-label="筛选日志">
+          <span class="seg" role="group" aria-label="日志类型">
+            <button type="button" data-filter="all" aria-pressed="true">全部</button>
+            <button type="button" data-filter="decision" aria-pressed="false">决策</button>
+            <button type="button" data-filter="cmd" aria-pressed="false">按键</button>
+          </span>
+          <button class="btn btn-sm btn-ghost" id="clearBtn" type="button">清屏</button>
+        </div>
+        <div class="log-wrap">
+          <div class="log-stream" id="logStream" tabindex="0" aria-label="日志内容"><div class="log-empty">等待日志…</div></div>
+          <button class="btn btn-sm jump" id="jumpBtn" type="button" hidden>↓ 跳到最新</button>
+        </div>
+      </section>
     </div>
-  </header>
-
-  <main>
-    <!-- Hero control card -->
-    <section class="hero-card">
-      <div class="hero-info">
-        <div class="hero-title">BOT OPERATION CONTROL</div>
-        <div class="hero-state" id="heroState">
-          <span id="heroStateText">正在连接机器人...</span>
-        </div>
-        <div class="hero-desc" id="heroDesc">正在从本地控制器获取遥测数据</div>
-      </div>
-      <div class="hero-actions">
-        <button class="btn-toggle start" id="toggleBtn" onclick="toggleBot()">
-          <span id="toggleBtnIcon">▶</span>
-          <span id="toggleBtnText">启动机器人</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- Dual Target Tracking Card: Main Target & Wayside Sub-Target -->
-    <section class="targets-deck">
-      <!-- Main Target -->
-      <div class="target-card main-card">
-        <div class="card-header">
-          <h3>🚩 战略主目标 (Main Target)</h3>
-          <span class="badge badge-main" id="mainBadge">规划中</span>
-        </div>
-        <div class="target-body">
-          <div class="target-avatar" id="mainAvatar">🎯</div>
-          <div class="target-info">
-            <div class="target-name" id="mainTargetName">-</div>
-            <div class="target-detail">
-              <span>距离: <b class="target-dist" id="mainDistance">- px</b></span>
-              <span>导航: <span id="mainNavMode">小地图</span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sub Target (Wayside Pickup) -->
-      <div class="target-card sub-card">
-        <div class="card-header">
-          <h3>⚡ 顺路途经目标 (Sub Target / 途经点)</h3>
-          <span class="badge badge-idle" id="subBadge">直奔主目标中</span>
-        </div>
-        <div class="target-body">
-          <div class="target-avatar" id="subAvatar">💎</div>
-          <div class="target-info">
-            <div class="target-name" id="subTargetName">无顺路物品</div>
-            <div class="target-detail" id="subDetail">
-              <span>沿途暂未发现需偏航顺手拾取的道具</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Telemetry grid -->
-    <section class="telemetry-grid">
-      <div class="telem-cell">
-        <span class="telem-label">所在区域 (Zone)</span>
-        <span class="telem-val" id="zoneVal">-</span>
-      </div>
-      <div class="telem-cell">
-        <span class="telem-label">等级与倒计时</span>
-        <span class="telem-val" id="levelTimeVal">-</span>
-      </div>
-      <div class="telem-cell">
-        <span class="telem-label">区域头目 (Boss 阶段)</span>
-        <span class="telem-val" id="bossVal">waiting</span>
-      </div>
-      <div class="telem-cell">
-        <span class="telem-label">祭坛状态</span>
-        <span class="telem-val" id="chargingVal">未充能</span>
-      </div>
-      <div class="telem-cell">
-        <span class="telem-label">当前按键 (Keys)</span>
-        <span class="telem-val" id="heldKeysVal">None</span>
-      </div>
-      <div class="telem-cell">
-        <span class="telem-label">防卡监测 (Stuck)</span>
-        <span class="telem-val" id="stuckVal">正常移动</span>
-      </div>
-      <div class="telem-cell">
-        <span class="telem-label">决策周期延迟</span>
-        <span class="telem-val" id="stepDurationVal">0 ms</span>
-      </div>
-    </section>
-
-    <!-- Console Log Section -->
-    <section class="bottom-layout">
-      <div class="console-card">
-        <div class="console-header">
-          <span class="console-title">实时决策与行为日志 (Live Decision Log)</span>
-          <div class="console-actions">
-            <button class="console-btn" onclick="clearLogs()">清屏</button>
-            <button class="console-btn" id="autoScrollBtn" onclick="toggleAutoScroll()">自动滚屏: 开</button>
-          </div>
-        </div>
-        <div class="log-stream" id="logStream">正在等待日志数据...</div>
-      </div>
-    </section>
   </main>
 
   <script>
-    let isPaused = true;
-    let autoScroll = true;
-    let localLogs = [];
+    const { $, esc, botMode, toggleBot } = window.Bonk;
 
-    const EMOJI_MAP = {
-      '符文祭坛': '⛩️',
-      '圣地': '🏛️',
-      '骷髅': '💀',
-      '区域头目': '👑',
-      '传送门': '🌀',
-      '精灵球': '🔴',
-      '超级球': '🔵',
-      '礼物球': '🎁',
-      '金币': '🪙',
-      '吉利蛋': '🥚',
-      '探索未知': '🧭',
+    const EMOJI = {
+      '符文祭坛': '⛩️', '圣地': '🏛️', '骷髅': '💀', '区域头目': '👑', '传送门': '🌀',
+      '精灵球': '🔴', '超级球': '🔵', '礼物球': '🎁', '金币': '🪙', '吉利蛋': '🥚', '探索未知': '🧭',
     };
+    const NAV = { minimap: '小地图', zonemap: '大地图 (Tab)', arena_orbit: '头目场地绕圈' };
+    const PROX_RANGE = 600;  // px at which the proximity bar is empty
 
-    function getAvatar(name) {
-      if (!name) return '🎯';
-      for (const [k, v] of Object.entries(EMOJI_MAP)) {
-        if (name.includes(k)) return v;
-      }
-      return '⭐';
+    // Target names match /icons/<name> for anything on the targets page; fall back to an emoji.
+    const avatarCache = {};
+    function setAvatar(el, name, fallback) {
+      if (el.dataset.name === name) return;
+      el.dataset.name = name;
+      const emoji = Object.entries(EMOJI).find(([k]) => name.includes(k))?.[1] || fallback;
+      el.classList.remove('has-img');
+      el.textContent = emoji;
+      if (!name || avatarCache[name] === false) return;
+      const img = new Image();
+      img.alt = '';
+      img.onload = () => { avatarCache[name] = true; if (el.dataset.name === name) { el.replaceChildren(img); el.classList.add('has-img'); } };
+      img.onerror = () => { avatarCache[name] = false; };
+      img.src = '/icons/' + encodeURIComponent(name);
     }
 
-    async function pollStatus() {
-      try {
-        const res = await fetch('/api/status');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        updateUI(data);
-      } catch (err) {
-        document.getElementById('statusPill').className = 'status-pill offline';
-        document.getElementById('statusPillText').textContent = '未连接';
-        document.getElementById('heroStateText').textContent = '控制器离线';
-        document.getElementById('heroDesc').textContent = '未检测到正在运行的 autobonk 进程';
-      }
+    const fmtDist = (d) => (d === null || d === undefined) ? null : Math.round(d);
+    const prox = (d) => d === null ? 0 : Math.max(4, Math.min(100, 100 - (d / PROX_RANGE) * 100));
+
+    // ---------- Render ----------
+    function render(s) {
+      const mode = botMode(s);
+      $('main').classList.toggle('stale', mode === 'offline');
+
+      // Hero
+      $('hero').className = `card hero is-${mode}`;
+      $('heroState').textContent = { offline: s ? '未连接到游戏' : '控制器离线', paused: '已暂停', running: '自动运行中' }[mode];
+      $('heroDesc').textContent = !s ? '没有检测到 autobonk 进程，启动后此页会自动刷新'
+        : mode === 'offline' ? '请先打开游戏，机器人连上后会自动显示状态'
+        : (s.status_text || (mode === 'paused' ? '点击右侧按钮继续' : '正在寻路、拾取和选卡'));
+      const btn = $('heroBtn');
+      btn.disabled = mode === 'offline';
+      btn.className = `btn btn-hero ${mode === 'running' ? 'pause' : 'start'}`;
+      btn.innerHTML = mode === 'running'
+        ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg>暂停'
+        : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z"/></svg>' + (mode === 'paused' ? '继续运行' : '启动');
+
+      if (!s) return;
+
+      // Session
+      const done = (s.wins || 0) + (s.losses || 0);
+      $('statRuns').textContent = s.runs || 0;
+      $('statWins').textContent = s.wins || 0;
+      $('statLosses').textContent = s.losses || 0;
+      $('statRate').textContent = done ? Math.round((s.wins / done) * 100) + '%' : '—';
+
+      // Zone "区域 2/3"
+      const zm = /(\d+)\s*\/\s*(\d+)/.exec(s.zone || '');
+      $('zoneVal').innerHTML = zm ? `${zm[1]}<small>/ ${zm[2]}</small>` : esc(s.zone || '—');
+      const zi = zm ? +zm[1] : 0;
+      [...$('zoneBar').children].forEach((el, i) => { el.className = i + 1 < zi ? 'on' : i + 1 === zi ? 'cur' : ''; });
+
+      $('levelVal').textContent = s.level != null ? 'Lv ' + s.level : '—';
+
+      const cd = s.countdown || '';
+      const overtime = cd.startsWith('+');
+      $('timeVal').textContent = cd || '--:--';
+      $('timeVal').className = 'tile-val' + (overtime ? ' danger' : (s.seconds_left != null && s.seconds_left < 60 ? ' warn' : ''));
+      $('overtimePill').hidden = !overtime;
+
+      // Boss: waiting → ready → fighting → beaten
+      const phase = s.boss_phase === 'waiting' && s.boss_ready ? 'ready' : s.boss_phase;
+      const B = {
+        waiting: ['等待', '', '等级或时间未到', 0],
+        ready: ['条件达成', 'warn', '前往骷髅召唤', 1],
+        fighting: ['战斗中', 'danger', '正在攻击头目', 2],
+        beaten: ['已击败', 'ok', '前往传送门', 3],
+      }[phase] || [esc(phase), '', '—', 0];
+      $('bossPill').className = 'pill ' + B[1];
+      $('bossPill').textContent = B[0];
+      $('bossVal').textContent = B[2];
+      [...$('bossBar').children].forEach((el, i) => { el.className = phase === 'beaten' ? 'done' : i < B[3] ? 'on' : ''; });
+
+      // Main target
+      const main = s.main_target || s.target || '';
+      const md = fmtDist(s.target_distance);
+      $('mainCard').classList.toggle('idle', !main);
+      $('mainName').textContent = main || '探索地图（暂无明确目标）';
+      setAvatar($('mainAvatar'), main, main ? '⭐' : '🧭');
+      $('mainDist').textContent = md === null ? '—' : md + ' px';
+      $('navMode').textContent = NAV[s.nav_mode] || s.nav_mode || '—';
+      $('mainPill').textContent = main ? '已锁定' : '巡航';
+      $('mainProx').style.width = prox(md) + '%';
+
+      // Sub target
+      const sub = s.sub_target || '';
+      const sd = fmtDist(s.sub_target_distance);
+      $('subCard').classList.toggle('idle', !sub);
+      $('subPill').className = 'pill ' + (sub ? 'ok' : '');
+      $('subPill').textContent = sub ? '顺手拾取' : '无';
+      $('subName').textContent = sub || '沿途没有值得绕路的物品';
+      setAvatar($('subAvatar'), sub, sub ? '💎' : '✨');
+      $('subMeta').innerHTML = sub
+        ? `<span>距离 <b>${sd === null ? '贴身' : sd + ' px'}</b></span><span>拾取后回到主路线</span>`
+        : '<span>直奔主目标</span>';
+      $('subProx').style.width = sub ? prox(sd) + '%' : '0';
+
+      // Telemetry
+      const charge = $('chargeVal');
+      charge.textContent = s.charging ? '圈内充能中' : '未充能';
+      charge.className = s.charging ? 'ok' : '';
+      const stuck = $('stuckVal');
+      stuck.textContent = s.stuck_seconds > 0 ? `卡住 ${s.stuck_seconds}s，侧移脱困` : '移动正常';
+      stuck.className = s.stuck_seconds > 0 ? 'warn' : 'ok';
+      const keys = s.held_keys || [];
+      $('keysVal').innerHTML = keys.length
+        ? `<span class="keys">${keys.map((k) => `<kbd>${esc(String(k).replace(/^Key/, ''))}</kbd>`).join('')}</span>`
+        : '<span style="color:var(--faint)">无</span>';
+      const ms = Math.round(s.step_duration_ms || 0);
+      $('stepVal').textContent = ms + ' ms';
+      $('stepVal').className = ms > 800 ? 'warn' : '';
+      $('statusText').textContent = s.status_text || '—';
+
+      renderLogs(s.recent_logs || []);
     }
 
-    function updateUI(data) {
-      isPaused = Boolean(data.paused);
-      const connected = Boolean(data.connected);
+    // ---------- Log ----------
+    let logs = [];
+    let clearedAt = null;       // last line visible when 清屏 was pressed
+    let filter = 'all';
+    let follow = true;
+    let lastKey = '';
 
-      // 1. Status Pill & Hero
-      const pill = document.getElementById('statusPill');
-      const pillText = document.getElementById('statusPillText');
-      const heroText = document.getElementById('heroStateText');
-      const heroDesc = document.getElementById('heroDesc');
-      const toggleBtn = document.getElementById('toggleBtn');
-      const toggleBtnText = document.getElementById('toggleBtnText');
-      const toggleBtnIcon = document.getElementById('toggleBtnIcon');
+    const isCmd = (l) => /^\[[\d:]+\]\s*->/.test(l);
+    const isDecision = (l) => /\[(目标决策|Boss判定)\]/.test(l) || !isCmd(l);
 
-      if (!connected) {
-        pill.className = 'status-pill offline';
-        pillText.textContent = '未连接';
-        heroText.textContent = '未连接到游戏';
-        heroDesc.textContent = '请先启动游戏并运行 autobonk 机器人';
-        toggleBtn.disabled = true;
-      } else if (isPaused) {
-        pill.className = 'status-pill paused';
-        pillText.textContent = '已暂停';
-        heroText.textContent = '机器人已暂停';
-        heroDesc.textContent = data.status_text || '挂起中，点击右侧按钮恢复自动寻路与战斗';
-        toggleBtn.disabled = false;
-        toggleBtn.className = 'btn-toggle start';
-        toggleBtnIcon.textContent = '▶';
-        toggleBtnText.textContent = '启动机器人';
-      } else {
-        pill.className = 'status-pill running';
-        pillText.textContent = '运行中';
-        heroText.textContent = '机器人自主运行中';
-        heroDesc.textContent = data.status_text || '正在执行寻路巡航、拾取与卡牌决策';
-        toggleBtn.disabled = false;
-        toggleBtn.className = 'btn-toggle pause';
-        toggleBtnIcon.textContent = '⏸';
-        toggleBtnText.textContent = '暂停机器人';
-      }
-
-      // 2. Main Target & Sub Target
-      const mainT = data.main_target || data.target || '';
-      const subT = data.sub_target || '';
-      const mainDist = data.target_distance;
-      const subDist = data.sub_target_distance;
-
-      // Main Card
-      document.getElementById('mainTargetName').textContent = mainT || '探索漫游 (无明确目标)';
-      document.getElementById('mainAvatar').textContent = getAvatar(mainT);
-      document.getElementById('mainDistance').textContent = (mainDist !== null && mainDist !== undefined) ? Math.round(mainDist) + ' px' : '-';
-      document.getElementById('mainNavMode').textContent = data.nav_mode === 'zonemap' ? '大地图 (Tab 全局巡航)' : '小地图 (局部精准)';
-      document.getElementById('mainBadge').textContent = mainT ? '已锁定' : '巡航中';
-
-      // Sub Card (Wayside target)
-      const subBadge = document.getElementById('subBadge');
-      if (subT) {
-        subBadge.className = 'badge badge-sub';
-        subBadge.textContent = '★ 顺手拾取中';
-        document.getElementById('subAvatar').textContent = getAvatar(subT);
-        document.getElementById('subTargetName').textContent = subT;
-        const subDistStr = (subDist !== null && subDist !== undefined) ? Math.round(subDist) + ' px' : '近身';
-        document.getElementById('subDetail').innerHTML = `
-          <span>顺路距离: <b class="target-dist">${subDistStr}</b></span>
-          <span style="color:var(--w-pos);">已触发微调偏航，拾取后自动恢复主路线</span>
-        `;
-      } else {
-        subBadge.className = 'badge badge-idle';
-        subBadge.textContent = '直奔主目标';
-        document.getElementById('subAvatar').textContent = '✨';
-        document.getElementById('subTargetName').textContent = '无顺路物品';
-        document.getElementById('subDetail').innerHTML = `<span>沿途暂未扫描到高性价比顺路目标</span>`;
-      }
-
-      // 3. Telemetry grid
-      document.getElementById('zoneVal').textContent = data.zone || '未知区域';
-      const lv = data.level !== null && data.level !== undefined ? 'Lv ' + data.level : 'Lv ?';
-      const cd = data.countdown || '--:--';
-      document.getElementById('levelTimeVal').textContent = `${lv}  |  ${cd}`;
-
-      // Boss
-      let bossText = data.boss_phase || 'waiting';
-      if (data.boss_ready) bossText += ' (条件达成!)';
-      const bossEl = document.getElementById('bossVal');
-      bossEl.textContent = bossText;
-      bossEl.className = 'telem-val' + (data.boss_ready ? ' warning' : '');
-
-      // Charging
-      const chargeEl = document.getElementById('chargingVal');
-      chargeEl.textContent = data.charging ? '正在圈内充能 ⚡' : '正常寻路';
-      chargeEl.className = 'telem-val' + (data.charging ? ' active' : '');
-
-      // Held keys
-      const held = (data.held_keys && data.held_keys.length > 0) ? data.held_keys.join(' + ') : 'None';
-      document.getElementById('heldKeysVal').textContent = held;
-
-      // Stuck
-      const stuckEl = document.getElementById('stuckVal');
-      if (data.stuck_seconds > 0) {
-        stuckEl.textContent = `防卡侧移 (${data.stuck_seconds}s)`;
-        stuckEl.className = 'telem-val warning';
-      } else {
-        stuckEl.textContent = '顺畅运行';
-        stuckEl.className = 'telem-val active';
-      }
-
-      // Step duration
-      document.getElementById('stepDurationVal').textContent = (data.step_duration_ms || 0) + ' ms';
-
-      // 4. Logs
-      if (Array.isArray(data.recent_logs)) {
-        renderLogs(data.recent_logs);
-      }
+    function lineHtml(raw) {
+      const m = /^\[([\d:]+)\]\s*(.*)$/.exec(raw);
+      const time = m ? m[1] : '';
+      let text = esc(m ? m[2] : raw);
+      let cls = '';
+      if (isCmd(raw)) { cls = 'cmd'; text = text.replace(/^-&gt;\s*/, '→ '); }
+      if (text.includes('[目标决策]')) { cls = 'target'; text = text.replace('[目标决策]', '<span class="tag">[目标决策]</span>'); }
+      if (text.includes('[Boss判定]')) { cls = 'boss'; text = text.replace('[Boss判定]', '<span class="tag">[Boss判定]</span>'); }
+      text = text.replace(/(顺路:\s*[^)\s]+)/, '<span class="sub">$1</span>');
+      return `<div class="log-line ${cls}"><span class="log-time">${time}</span><span>${text}</span></div>`;
     }
 
-    function renderLogs(logs) {
-      if (logs.length === 0) return;
-      const stream = document.getElementById('logStream');
-      const html = logs.map(line => {
-        let escLine = String(line).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        if (escLine.includes('[目标决策]')) {
-          escLine = `<span class="log-tag-target">[目标决策]</span>` + escLine.replace('[目标决策]', '');
-        }
-        if (escLine.includes('顺路:')) {
-          escLine = escLine.replace(/(顺路:\s*[^)\s]+)/, '<span class="log-tag-sub">$1</span>');
-        }
-        if (escLine.includes('[Boss判定]')) {
-          escLine = `<span class="log-tag-boss">[Boss判定]</span>` + escLine.replace('[Boss判定]', '');
-        }
-        return `<div class="log-line">${escLine}</div>`;
-      }).join('');
-      stream.innerHTML = html;
-      if (autoScroll) {
-        stream.scrollTop = stream.scrollHeight;
+    function visibleLogs() {
+      let out = logs;
+      if (clearedAt !== null) {
+        const i = out.lastIndexOf(clearedAt);
+        if (i >= 0) out = out.slice(i + 1);
       }
+      if (filter === 'cmd') out = out.filter(isCmd);
+      if (filter === 'decision') out = out.filter(isDecision);
+      const q = $('logSearch').value.trim().toLowerCase();
+      if (q) out = out.filter((l) => l.toLowerCase().includes(q));
+      return out;
     }
 
-    async function toggleBot() {
-      const action = isPaused ? 'start' : 'pause';
-      try {
-        const res = await fetch('/api/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action }),
-        });
-        if (res.ok) {
-          pollStatus();
-        }
-      } catch (err) {
-        console.error('Failed to toggle bot:', err);
-      }
+    function renderLogs(next, force = false) {
+      logs = next;
+      const shown = visibleLogs();
+      const key = filter + '|' + $('logSearch').value + '|' + clearedAt + '|' + shown.length + '|' + (shown.at(-1) || '');
+      if (!force && key === lastKey) return;
+      lastKey = key;
+      const stream = $('logStream');
+      stream.innerHTML = shown.length
+        ? shown.map(lineHtml).join('')
+        : `<div class="log-empty">${logs.length ? '没有符合筛选条件的日志' : '等待日志…'}</div>`;
+      $('logCount').textContent = shown.length ? shown.length + ' 条' : '';
+      if (follow) stream.scrollTop = stream.scrollHeight;
     }
 
-    function clearLogs() {
-      document.getElementById('logStream').innerHTML = '<div class="log-line">日志已清空</div>';
-    }
+    // Following stops when you scroll up to read, and resumes at the bottom.
+    $('logStream').addEventListener('scroll', () => {
+      const el = $('logStream');
+      follow = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+      $('jumpBtn').hidden = follow;
+    });
+    $('jumpBtn').addEventListener('click', () => {
+      const el = $('logStream');
+      el.scrollTop = el.scrollHeight;
+      follow = true;
+      $('jumpBtn').hidden = true;
+    });
+    $('clearBtn').addEventListener('click', () => {
+      clearedAt = logs.at(-1) ?? null;
+      renderLogs(logs, true);
+    });
+    document.querySelector('.seg').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-filter]');
+      if (!b) return;
+      filter = b.dataset.filter;
+      document.querySelectorAll('.seg [data-filter]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+      renderLogs(logs, true);
+    });
+    $('logSearch').addEventListener('input', () => renderLogs(logs, true));
 
-    function toggleAutoScroll() {
-      autoScroll = !autoScroll;
-      document.getElementById('autoScrollBtn').textContent = '自动滚屏: ' + (autoScroll ? '开' : '关');
-    }
-
-    setInterval(pollStatus, 1000);
-    pollStatus();
+    $('heroBtn').addEventListener('click', toggleBot);
+    window.Bonk.onStatus(render);
   </script>
 </body>
 </html>
